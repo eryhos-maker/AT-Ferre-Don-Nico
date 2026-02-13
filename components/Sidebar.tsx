@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, CheckSquare, Users, FileCode, LogOut, Hexagon } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Users, FileCode, LogOut, Hexagon, Settings } from 'lucide-react';
 import { NAV_ITEMS } from '../constants';
 import { User, Role } from '../types';
 import Logo from './Logo';
@@ -18,6 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, currentPath, onNavigate,
       case 'Tareas': return <CheckSquare size={20} />;
       case 'Equipo': return <Users size={20} />;
       case 'Arquitectura (Docs)': return <FileCode size={20} />;
+      case 'Configuración': return <Settings size={20} />;
       default: return <Hexagon size={20} />;
     }
   };
@@ -36,8 +37,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, currentPath, onNavigate,
       // Only Gerente sees Docs/Architecture
       if (item.path === '/docs') return isGerente;
 
-      // Dashboard and Team are for Management roles
-      if (['/', '/team'].includes(item.path)) return hasManagementAccess;
+      // Dashboard, Team, Settings are for Management roles
+      if (['/', '/team', '/settings'].includes(item.path)) return hasManagementAccess;
 
       return false;
     });
@@ -46,9 +47,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, currentPath, onNavigate,
   const visibleNavItems = getVisibleNavItems();
 
   return (
-    // Background updated to "Don Nico" Blue (approx #1e40af - blue-800/900 mix)
-    <div className="h-screen w-64 bg-[#1e3a8a] text-white flex flex-col fixed left-0 top-0 shadow-xl z-20">
-      <div className="p-4 flex items-center justify-center border-b border-blue-800 bg-[#172554]">
+    <div className="h-screen w-64 bg-[#1e3a8a] text-white flex flex-col fixed left-0 top-0 shadow-xl z-20 bg-tools-pattern">
+      <div className="p-4 flex items-center justify-center border-b border-blue-800 bg-[#172554]/80 backdrop-blur-sm">
         <div className="w-full max-w-[180px] py-2">
            <Logo className="h-16 w-full" />
         </div>
@@ -66,7 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, currentPath, onNavigate,
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
                 currentPath === item.path
                   ? 'bg-[#dc2626] text-white shadow-md' // Active state is now "Ferre" Red
-                  : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+                  : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'
               }`}
             >
               {getIcon(item.label)}
@@ -76,7 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, currentPath, onNavigate,
         </nav>
       </div>
 
-      <div className="mt-auto p-4 border-t border-blue-800">
+      <div className="mt-auto p-4 border-t border-blue-800/50 bg-[#1e3a8a]/50 backdrop-blur-sm">
         {currentUser && (
           <div className="flex items-center gap-3 mb-4 px-2">
             <img 
@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, currentPath, onNavigate,
         )}
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-100 transition-colors text-sm"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-300 hover:bg-red-900/50 hover:text-red-100 transition-colors text-sm"
         >
           <LogOut size={18} />
           Cerrar Sesión

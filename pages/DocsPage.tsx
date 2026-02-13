@@ -5,15 +5,15 @@ const DocsPage: React.FC = () => {
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
       <div>
-        <h2 className="text-3xl font-bold text-gray-800">Documentación Técnica</h2>
-        <p className="text-gray-500 mt-2">Detalles de arquitectura, entregables y especificaciones del sistema AT Ferre Don Nico.</p>
+        <h2 className="text-3xl font-black text-gray-900">Documentación Técnica</h2>
+        <p className="text-gray-600 mt-2 font-medium">Detalles de arquitectura, entregables y especificaciones del sistema AT Ferre Don Nico.</p>
       </div>
 
       {/* Architecture Diagram */}
-      <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+      <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-100 rounded-lg"><Server className="text-blue-600" size={24} /></div>
-          <h3 className="text-xl font-bold text-gray-800">1. Arquitectura del Sistema</h3>
+          <div className="p-2 bg-blue-100 rounded-lg"><Server className="text-blue-700" size={24} /></div>
+          <h3 className="text-xl font-bold text-gray-900">1. Arquitectura del Sistema</h3>
         </div>
         
         <div className="bg-[#1e3a8a] rounded-xl p-6 overflow-x-auto text-white">
@@ -67,16 +67,16 @@ const DocsPage: React.FC = () => {
       </section>
 
       {/* ER Diagram */}
-      <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+      <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-indigo-100 rounded-lg"><Database className="text-indigo-600" size={24} /></div>
-          <h3 className="text-xl font-bold text-gray-800">2. Modelo Entidad-Relación (Base de Datos)</h3>
+          <div className="p-2 bg-indigo-100 rounded-lg"><Database className="text-indigo-700" size={24} /></div>
+          <h3 className="text-xl font-bold text-gray-900">2. Modelo Entidad-Relación (Base de Datos)</h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           <div className="border rounded-lg p-4 bg-gray-50">
-             <h4 className="font-bold text-gray-700 border-b pb-2 mb-2">Users</h4>
-             <ul className="text-sm font-mono text-gray-600 space-y-1">
+           <div className="border rounded-lg p-4 bg-gray-50 border-gray-200">
+             <h4 className="font-bold text-gray-800 border-b pb-2 mb-2">Users</h4>
+             <ul className="text-sm font-mono text-gray-700 space-y-1">
                <li>PK: id (UUID)</li>
                <li>name: varchar(100)</li>
                <li>email: varchar(150)</li>
@@ -86,9 +86,9 @@ const DocsPage: React.FC = () => {
              </ul>
            </div>
            
-           <div className="border rounded-lg p-4 bg-gray-50">
-             <h4 className="font-bold text-gray-700 border-b pb-2 mb-2">Tasks</h4>
-             <ul className="text-sm font-mono text-gray-600 space-y-1">
+           <div className="border rounded-lg p-4 bg-gray-50 border-gray-200">
+             <h4 className="font-bold text-gray-800 border-b pb-2 mb-2">Tasks</h4>
+             <ul className="text-sm font-mono text-gray-700 space-y-1">
                <li>PK: id (UUID)</li>
                <li>title: varchar(200)</li>
                <li>description: text</li>
@@ -100,9 +100,9 @@ const DocsPage: React.FC = () => {
              </ul>
            </div>
 
-           <div className="border rounded-lg p-4 bg-gray-50">
-             <h4 className="font-bold text-gray-700 border-b pb-2 mb-2">Departments (Hierarchy)</h4>
-             <ul className="text-sm font-mono text-gray-600 space-y-1">
+           <div className="border rounded-lg p-4 bg-gray-50 border-gray-200">
+             <h4 className="font-bold text-gray-800 border-b pb-2 mb-2">Departments (Hierarchy)</h4>
+             <ul className="text-sm font-mono text-gray-700 space-y-1">
                <li>PK: id (integer)</li>
                <li>name: varchar(100)</li>
                <li>parent_id: FK (Self Reference)</li>
@@ -110,9 +110,9 @@ const DocsPage: React.FC = () => {
              </ul>
            </div>
 
-           <div className="border rounded-lg p-4 bg-gray-50">
-             <h4 className="font-bold text-gray-700 border-b pb-2 mb-2">Audit_Logs</h4>
-             <ul className="text-sm font-mono text-gray-600 space-y-1">
+           <div className="border rounded-lg p-4 bg-gray-50 border-gray-200">
+             <h4 className="font-bold text-gray-800 border-b pb-2 mb-2">Audit_Logs</h4>
+             <ul className="text-sm font-mono text-gray-700 space-y-1">
                <li>PK: id (bigint)</li>
                <li>user_id: FK</li>
                <li>action: varchar(50)</li>
@@ -125,12 +125,12 @@ const DocsPage: React.FC = () => {
 
       {/* Tech Stack & Estimation */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+        <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-green-100 rounded-lg"><Cpu className="text-green-600" size={24} /></div>
-            <h3 className="text-xl font-bold text-gray-800">Stack Tecnológico</h3>
+            <div className="p-2 bg-green-100 rounded-lg"><Cpu className="text-green-700" size={24} /></div>
+            <h3 className="text-xl font-bold text-gray-900">Stack Tecnológico</h3>
           </div>
-          <ul className="space-y-3">
+          <ul className="space-y-3 text-gray-700">
              <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> <strong>Frontend:</strong> React 18, TypeScript, Tailwind CSS, Vite.</li>
              <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> <strong>Backend:</strong> Node.js (NestJS) o Python (FastAPI).</li>
              <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> <strong>Base de Datos:</strong> PostgreSQL + Prisma ORM.</li>
@@ -139,28 +139,28 @@ const DocsPage: React.FC = () => {
           </ul>
         </section>
 
-        <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+        <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-orange-100 rounded-lg"><ShieldCheck className="text-orange-600" size={24} /></div>
-            <h3 className="text-xl font-bold text-gray-800">Estimación por Fases</h3>
+            <div className="p-2 bg-orange-100 rounded-lg"><ShieldCheck className="text-orange-700" size={24} /></div>
+            <h3 className="text-xl font-bold text-gray-900">Estimación por Fases</h3>
           </div>
           <div className="space-y-4">
              <div>
-               <div className="flex justify-between text-sm font-medium mb-1">
+               <div className="flex justify-between text-sm font-bold text-gray-800 mb-1">
                  <span>Fase 1: MVP & Core (Auth, Tareas)</span>
                  <span className="text-gray-500">4 Semanas</span>
                </div>
                <div className="h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 w-full"></div></div>
              </div>
              <div>
-               <div className="flex justify-between text-sm font-medium mb-1">
+               <div className="flex justify-between text-sm font-bold text-gray-800 mb-1">
                  <span>Fase 2: Reportes & Jerarquía</span>
                  <span className="text-gray-500">3 Semanas</span>
                </div>
                <div className="h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-orange-400 w-3/4"></div></div>
              </div>
              <div>
-               <div className="flex justify-between text-sm font-medium mb-1">
+               <div className="flex justify-between text-sm font-bold text-gray-800 mb-1">
                  <span>Fase 3: Notificaciones & AI</span>
                  <span className="text-gray-500">2 Semanas</span>
                </div>
