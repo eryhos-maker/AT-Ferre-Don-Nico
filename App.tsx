@@ -8,7 +8,7 @@ import DocsPage from './pages/DocsPage';
 import TeamPage from './pages/TeamPage';
 import SettingsPage from './pages/SettingsPage';
 import { User, Task, TaskStatus, Role, Branch } from './types';
-import { sendOverdueNotification, sendUpcomingDeadlineNotification } from './services/notificationService';
+import { sendOverdueNotification, sendUpcomingDeadlineNotification, requestNotificationPermission } from './services/notificationService';
 import { 
   fetchUsers, 
   fetchBranches, 
@@ -52,6 +52,9 @@ const App: React.FC = () => {
       }
     };
     loadData();
+    
+    // Request Notification Permission on load
+    requestNotificationPermission();
   }, []);
 
   // Permission Logic
@@ -109,6 +112,9 @@ const App: React.FC = () => {
     const initialPath = isManager ? '/' : '/tasks';
     setCurrentPath(initialPath);
     window.location.hash = initialPath;
+    
+    // Ensure permission is requested again on login if missed
+    requestNotificationPermission();
   };
 
   const handleLogout = () => {

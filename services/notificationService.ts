@@ -1,5 +1,38 @@
 import { Task, User, Role } from '../types';
 
+// Solicitar permiso al usuario para mostrar notificaciones
+export const requestNotificationPermission = async () => {
+  if (!('Notification' in window)) {
+    console.log('Este navegador no soporta notificaciones de escritorio');
+    return false;
+  }
+
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  }
+  return false;
+};
+
+// Helper privado para lanzar la notificación nativa
+const spawnNotification = (title: string, body: string) => {
+  if (Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body: body,
+        icon: '/favicon.ico', // Intentará usar el favicon si existe, o el default del navegador
+        requireInteraction: true // La notificación se queda hasta que el usuario la cierra (en navegadores soportados)
+      });
+    } catch (e) {
+      console.error("Error al mostrar notificación nativa:", e);
+    }
+  }
+};
+
 export const sendOverdueNotification = (task: Task, allUsers: User[]) => {
   // Roles to notify: Gerente, Jefe Administrativo, Coordinador Berel
   const targetRoles = [Role.GERENTE, Role.JEFE_ADMIN, Role.COORDINADOR_BEREL];
@@ -7,6 +40,13 @@ export const sendOverdueNotification = (task: Task, allUsers: User[]) => {
   const recipients = allUsers.filter(u => targetRoles.includes(u.role));
   const recipientEmails = recipients.map(u => u.email).join(', ');
 
+  // 1. Notificación Nativa (Push Local)
+  spawnNotification(
+    `🚨 Tarea Vencida: ${task.folio}`,
+    `La tarea "${task.title}" ha excedido su fecha límite. Asignada a: ${task.assignedTo.length} persona(s).`
+  );
+
+  // 2. Simulación de Correo (Log)
   console.group(`📧 [SIMULACIÓN CORREO] Tarea Vencida: ${task.folio}`);
   console.log(`To: ${recipientEmails}`);
   console.log(`Subject: ALERTA - Tarea Vencida: ${task.title}`);
@@ -38,6 +78,15 @@ export const sendUpcomingDeadlineNotification = (task: Task, allUsers: User[]) =
 
   const recipientEmails = recipients.map(u => u.email).join(', ');
 
+  // 1. Notificación Nativa (Push Local)
+  // Solo mostramos push si el usuario actual es uno de los destinatarios (en un entorno real esto se filtra por sesión)
+  // Como es una demo local, mostramos la alerta general.
+  spawnNotification(
+    `⚠️ Próximo Vencimiento: ${task.folio}`,
+    `La tarea "${task.title}" vence en menos de 24 horas.`
+  );
+
+  // 2. Simulación de Correo (Log)
   console.group(`📧 [SIMULACIÓN CORREO] Próximo Vencimiento (24h): ${task.folio}`);
   console.log(`To: ${recipientEmails}`);
   console.log(`Subject: ⚠️ RECORDATORIO - Tarea por vencer: ${task.title}`);

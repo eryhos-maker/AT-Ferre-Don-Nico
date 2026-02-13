@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, User, TaskStatus, Priority, Role } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
@@ -74,12 +74,56 @@ const EvidenceModal: React.FC<{
   );
 };
 
+const ConfirmationModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+}> = ({ isOpen, onClose, onConfirm, title, message }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 border border-gray-300 transform transition-all scale-100">
+        <div className="flex flex-col items-center text-center">
+          <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+             <HelpCircle className="text-yellow-600" size={28} />
+          </div>
+          <h3 className="text-lg font-black text-gray-900 mb-2">{title}</h3>
+          <p className="text-sm text-gray-600 mb-6 font-medium leading-relaxed">
+            {message}
+          </p>
+          
+          <div className="flex w-full gap-3">
+            <button 
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-bold transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={onConfirm}
+              className="flex-1 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-sm font-bold shadow-sm transition-colors"
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCreateTask, onUpdateStatus, onSaveEvidence }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>(TaskStatus.PENDING);
   const [filterBranch, setFilterBranch] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Modals state
   const [evidenceTask, setEvidenceTask] = useState<Task | null>(null);
+  const [confirmationData, setConfirmationData] = useState<{task: Task, newStatus: TaskStatus} | null>(null);
 
   const canCreateTask = ![Role.SUPERVISOR_COM, Role.ENCARGADO_BEREL].includes(currentUser.role);
   const availableBranches = Array.from(new Set(users.map(u => u.branch).filter(Boolean))) as string[];
@@ -103,7 +147,6 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
     }
   };
 
-  // Helper para estilos de la tarjeta según estado
   const getTaskCardStyles = (status: TaskStatus) => {
     switch (status) {
         case TaskStatus.COMPLETED:
@@ -145,12 +188,30 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
       return u ? u.name.charAt(0) : '?';
   };
 
-  const handleStatusChangeAttempt = (task: Task, newStatus: string) => {
+  const handleStatusChangeAttempt = (task: Task, newStatusStr: string) => {
+    const newStatus = newStatusStr as TaskStatus;
+
+    // 1. Check if Evidence is required first
     if (newStatus === TaskStatus.COMPLETED && task.requiresEvidence && !task.evidenceUrl) {
       setEvidenceTask(task);
       return;
     }
-    onUpdateStatus(task.id, newStatus as TaskStatus);
+
+    // 2. If marking as Completed (and evidence already there or not needed), ask for confirmation
+    if (newStatus === TaskStatus.COMPLETED) {
+      setConfirmationData({ task, newStatus });
+      return;
+    }
+
+    // 3. For other statuses (Pending, In Progress), update immediately
+    onUpdateStatus(task.id, newStatus);
+  };
+
+  const confirmStatusChange = () => {
+    if (confirmationData) {
+      onUpdateStatus(confirmationData.task.id, confirmationData.newStatus);
+      setConfirmationData(null);
+    }
   };
 
   return (
@@ -350,6 +411,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
         onSave={onCreateTask}
       />
       
+      {/* Evidence Modal (Existing) */}
       {evidenceTask && (
         <EvidenceModal 
           isOpen={true}
@@ -359,6 +421,17 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
              onSaveEvidence(evidenceTask.id, url);
              setEvidenceTask(null);
           }}
+        />
+      )}
+
+      {/* Confirmation Modal (New) */}
+      {confirmationData && (
+        <ConfirmationModal
+          isOpen={true}
+          title="¿Confirmar Finalización?"
+          message={`Estás a punto de marcar la tarea "${confirmationData.task.title}" como Completada. Esta acción quedará registrada en el historial.`}
+          onClose={() => setConfirmationData(null)}
+          onConfirm={confirmStatusChange}
         />
       )}
     </div>
