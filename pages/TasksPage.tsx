@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, User, TaskStatus, Priority, Role } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
@@ -77,34 +77,43 @@ const EvidenceModal: React.FC<{
 const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCreateTask, onUpdateStatus, onSaveEvidence }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>(TaskStatus.PENDING);
-  const [filterBranch, setFilterBranch] = useState<string>('all'); // Nuevo filtro
+  const [filterBranch, setFilterBranch] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Estado para el manejo de evidencia
   const [evidenceTask, setEvidenceTask] = useState<Task | null>(null);
 
-  // Permission Logic: Supervisor Comercial and Encargado Berel cannot create tasks
   const canCreateTask = ![Role.SUPERVISOR_COM, Role.ENCARGADO_BEREL].includes(currentUser.role);
-
-  // Obtener sucursales únicas de los usuarios para el filtro
   const availableBranches = Array.from(new Set(users.map(u => u.branch).filter(Boolean))) as string[];
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case Priority.CRITICAL: return 'bg-red-100 text-red-800 border-red-300 font-bold';
-      case Priority.HIGH: return 'bg-orange-100 text-orange-800 border-orange-300 font-bold';
-      case Priority.MEDIUM: return 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
-      case Priority.LOW: return 'bg-gray-100 text-gray-700 border-gray-300 font-medium';
-      default: return 'bg-gray-100 text-gray-700';
+      case Priority.CRITICAL: return 'bg-red-50 text-red-700 border-red-200 ring-1 ring-red-300';
+      case Priority.HIGH: return 'bg-orange-50 text-orange-700 border-orange-200 ring-1 ring-orange-300';
+      case Priority.MEDIUM: return 'bg-blue-50 text-blue-700 border-blue-200 ring-1 ring-blue-300';
+      case Priority.LOW: return 'bg-gray-50 text-gray-600 border-gray-200 ring-1 ring-gray-300';
+      default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
   };
 
   const getStatusIcon = (status: TaskStatus) => {
     switch (status) {
-      case TaskStatus.COMPLETED: return <CheckCircle size={16} className="text-green-600" />;
-      case TaskStatus.OVERDUE: return <AlertTriangle size={16} className="text-red-600" />;
-      case TaskStatus.IN_PROGRESS: return <Clock size={16} className="text-blue-600" />;
+      case TaskStatus.COMPLETED: return <CheckCircle size={18} className="text-green-600" />;
+      case TaskStatus.OVERDUE: return <AlertTriangle size={18} className="text-red-600" />;
+      case TaskStatus.IN_PROGRESS: return <Clock size={18} className="text-blue-600" />;
       default: return <div className="w-4 h-4 rounded-full border-2 border-gray-400" />;
+    }
+  };
+
+  // Helper para estilos de la tarjeta según estado
+  const getTaskCardStyles = (status: TaskStatus) => {
+    switch (status) {
+        case TaskStatus.COMPLETED:
+            return 'border-l-green-500 hover:shadow-green-100';
+        case TaskStatus.OVERDUE:
+            return 'border-l-red-500 bg-red-50/40 hover:shadow-red-100';
+        case TaskStatus.IN_PROGRESS:
+            return 'border-l-blue-500 bg-blue-50/30 hover:shadow-blue-100';
+        default: // PENDING
+            return 'border-l-gray-400 hover:shadow-gray-100';
     }
   };
 
@@ -114,9 +123,6 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                           task.folio?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
-
-    // Lógica filtro por Sucursal:
-    // La tarea pertenece a una sucursal si ALGUNO de sus usuarios asignados pertenece a esa sucursal.
     const matchesBranch = filterBranch === 'all' || task.assignedTo.some(uid => {
         const user = users.find(u => u.id === uid);
         return user?.branch === filterBranch;
@@ -139,14 +145,11 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
       return u ? u.name.charAt(0) : '?';
   };
 
-  // Intercept Status Change
   const handleStatusChangeAttempt = (task: Task, newStatus: string) => {
-    // Si intenta completar y requiere evidencia Y no tiene evidencia
     if (newStatus === TaskStatus.COMPLETED && task.requiresEvidence && !task.evidenceUrl) {
       setEvidenceTask(task);
       return;
     }
-    // Si no hay restricciones, actualiza normal
     onUpdateStatus(task.id, newStatus as TaskStatus);
   };
 
@@ -170,15 +173,13 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
-        
-        {/* Row 1: Search and Branch Filter */}
         <div className="flex flex-col md:flex-row gap-4">
            <div className="relative flex-1">
              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" size={20} />
              <input
                type="text"
                placeholder="Buscar por título, descripción o folio..."
-               className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-600 outline-none text-gray-900 placeholder-gray-400 bg-gray-50"
+               className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-600 outline-none text-gray-900 placeholder-gray-400 bg-gray-50 transition-colors"
                value={searchTerm}
                onChange={(e) => setSearchTerm(e.target.value)}
              />
@@ -187,7 +188,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
            <div className="relative min-w-[200px]">
              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={18} />
              <select 
-               className="w-full pl-10 pr-8 py-2 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-600 outline-none appearance-none bg-gray-50 text-gray-900 font-bold cursor-pointer hover:bg-gray-100"
+               className="w-full pl-10 pr-8 py-2 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-600 outline-none appearance-none bg-gray-50 text-gray-900 font-bold cursor-pointer hover:bg-gray-100 transition-colors"
                value={filterBranch}
                onChange={(e) => setFilterBranch(e.target.value)}
              >
@@ -200,22 +201,19 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
            </div>
         </div>
 
-        {/* Row 2: Status Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {/* Orden Específico: Pendientes primero, luego el flujo natural */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {[TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.OVERDUE, TaskStatus.COMPLETED].map(status => (
              <button
              key={status}
              onClick={() => setFilterStatus(status)}
-             className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors border ${filterStatus === status ? 'bg-blue-700 text-white border-blue-800 shadow-md' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 hover:border-gray-400'}`}
+             className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-all border ${filterStatus === status ? 'bg-blue-800 text-white border-blue-900 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400'}`}
            >
              {status}
            </button>
           ))}
-          {/* 'Todas' al final */}
           <button
             onClick={() => setFilterStatus('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors border ${filterStatus === 'all' ? 'bg-gray-800 text-white border-gray-900 shadow-md' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 hover:border-gray-400'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-all border ${filterStatus === 'all' ? 'bg-gray-800 text-white border-gray-900 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400'}`}
           >
             Todas
           </button>
@@ -228,38 +226,40 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
             const completedSubtasks = task.subtasks?.filter(st => st.isCompleted).length || 0;
             const totalSubtasks = task.subtasks?.length || 0;
             const subtaskProgress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+            const cardStyles = getTaskCardStyles(task.status);
 
             return (
-          <div key={task.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all group">
+          <div key={task.id} className={`relative bg-white p-5 rounded-xl border border-gray-200 border-l-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${cardStyles} group`}>
+            
             <div className="flex flex-col md:flex-row justify-between gap-4">
               <div className="flex-1">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded font-mono border border-gray-300 font-bold" title="Folio de Seguimiento">
-                        <Hash size={10} /> {task.folio}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold border ${getPriorityColor(task.priority)}`}>
-                      {task.priority}
-                    </span>
-                    {task.requiresEvidence && (
-                       <span className="flex items-center gap-1 bg-orange-100 text-orange-800 text-xs px-2 py-0.5 rounded font-bold border border-orange-200">
-                         <FileText size={10} /> Evidencia Req.
-                       </span>
-                    )}
-                  </div>
+                {/* Header Row: Folio, Priority, Evidence Badge */}
+                <div className="flex items-center flex-wrap gap-2 mb-3">
+                  <span className="flex items-center gap-1 bg-white text-gray-600 text-[10px] px-2 py-1 rounded-md font-mono border border-gray-200 font-bold tracking-tight shadow-sm" title="Folio de Seguimiento">
+                      <Hash size={10} /> {task.folio}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm ${getPriorityColor(task.priority)}`}>
+                    {task.priority}
+                  </span>
+                  {task.requiresEvidence && (
+                      <span className="flex items-center gap-1 bg-orange-50 text-orange-700 text-[10px] px-2 py-0.5 rounded-md font-bold border border-orange-200">
+                        <FileText size={10} /> Evidencia
+                      </span>
+                  )}
                 </div>
                 
-                <h3 className="text-xl font-bold text-gray-900 mb-1">{task.title}</h3>
-                <p className="text-gray-600 text-sm mb-4 line-clamp-2 font-medium">{task.description}</p>
+                {/* Title & Description */}
+                <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight group-hover:text-blue-800 transition-colors">{task.title}</h3>
+                <p className="text-gray-600 text-sm mb-4 line-clamp-2 font-medium leading-relaxed">{task.description}</p>
                 
-                {/* Subtasks Progress */}
+                {/* Progress Bar (if subtasks exist) */}
                 {totalSubtasks > 0 && (
-                    <div className="mb-4">
+                    <div className="mb-4 bg-gray-50 p-2 rounded-lg border border-gray-100">
                         <div className="flex items-center justify-between text-xs text-gray-600 font-bold mb-1">
-                            <span className="flex items-center gap-1"><ListTodo size={12}/> Subtareas ({completedSubtasks}/{totalSubtasks})</span>
+                            <span className="flex items-center gap-1"><ListTodo size={12}/> Progreso</span>
                             <span>{Math.round(subtaskProgress)}%</span>
                         </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden border border-gray-300">
+                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
                             <div 
                                 className={`h-full rounded-full transition-all duration-500 ${subtaskProgress === 100 ? 'bg-green-500' : 'bg-blue-600'}`} 
                                 style={{ width: `${subtaskProgress}%` }}
@@ -268,23 +268,24 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                     </div>
                 )}
 
-                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-800 text-xs font-bold">
+                {/* Footer: Assignee, Date, Evidence Link */}
+                <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-gray-500 font-medium pt-2 border-t border-gray-100/50">
+                  <div className="flex items-center gap-2 bg-gray-50 pr-3 rounded-full border border-gray-100">
+                    <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-black shadow-sm">
                        {getFirstAssigneeInitial(task.assignedTo)}
                     </div>
-                    <span>Asignado a: <span className="text-gray-900 font-bold">{getAssignedNames(task.assignedTo)}</span></span>
+                    <span className="text-xs text-gray-700">{getAssignedNames(task.assignedTo)}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Calendar size={16} />
-                    <span>Vence: <span className={`${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'text-red-600 font-black' : 'text-gray-800 font-bold'}`}>
-                      {new Date(task.dueDate).toLocaleString()}
-                    </span></span>
+
+                  <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'bg-red-50 text-red-700 border-red-100' : 'bg-gray-50 text-gray-600 border-gray-100'}`}>
+                    <Calendar size={14} />
+                    <span>{new Date(task.dueDate).toLocaleDateString()} <span className="text-gray-400">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
+
                   {task.evidenceUrl && (
                     <a 
                       href="#" 
-                      className="flex items-center gap-1 text-blue-700 hover:underline text-xs bg-blue-50 px-2 py-1 rounded border border-blue-200 font-bold"
+                      className="flex items-center gap-1 text-blue-700 hover:text-blue-900 hover:underline text-xs bg-blue-50/50 px-2 py-1 rounded border border-blue-100 font-bold transition-colors ml-auto md:ml-0"
                       onClick={(e) => { e.preventDefault(); alert("Abriendo evidencia: " + task.evidenceUrl); }}
                     >
                       <ExternalLink size={12} /> Ver Evidencia
@@ -293,32 +294,50 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                 </div>
               </div>
 
-              <div className="flex md:flex-col items-center justify-between border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:pl-6 min-w-[200px]">
-                <div className="flex items-center gap-2 mb-2">
-                   {getStatusIcon(task.status)}
-                   <span className="text-sm font-bold text-gray-900">{task.status}</span>
-                </div>
-                
-                <select
-                  value={task.status}
-                  onChange={(e) => handleStatusChangeAttempt(task, e.target.value)}
-                  className="w-full md:w-auto px-3 py-1.5 bg-gray-50 border-2 border-gray-400 rounded-lg text-sm text-gray-900 font-bold focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer hover:bg-gray-100"
-                >
-                  {Object.values(TaskStatus).map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-center text-gray-400 mt-2 hidden md:block font-medium">
-                    Cerrar la tarea finalizará el proceso para todos los asignados.
-                </p>
+              {/* Status Action Column */}
+              <div className="flex md:flex-col items-center justify-between md:justify-start gap-3 border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:pl-6 min-w-[180px]">
+                 <div className="flex items-center gap-2 w-full md:w-auto justify-center md:justify-start">
+                    {getStatusIcon(task.status)}
+                    <span className={`text-sm font-bold capitalize ${
+                        task.status === TaskStatus.COMPLETED ? 'text-green-700' :
+                        task.status === TaskStatus.OVERDUE ? 'text-red-700' :
+                        task.status === TaskStatus.IN_PROGRESS ? 'text-blue-700' : 'text-gray-700'
+                    }`}>
+                        {task.status.replace('_', ' ')}
+                    </span>
+                 </div>
+
+                 <div className="relative w-full">
+                    <select
+                      value={task.status}
+                      onChange={(e) => handleStatusChangeAttempt(task, e.target.value)}
+                      className="w-full appearance-none px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm text-gray-800 font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer hover:border-gray-400 transition-colors shadow-sm"
+                    >
+                      {Object.values(TaskStatus).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <MoreVertical size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                 </div>
+                 
+                 <p className="text-[10px] text-center text-gray-400 leading-tight hidden md:block mt-auto">
+                    Cambiar el estado notificará a los asignados.
+                 </p>
               </div>
             </div>
           </div>
         )})}
+        
         {filteredTasks.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200 border-dashed">
-            <Filter className="mx-auto text-gray-300 mb-2" size={48} />
+          <div className="text-center py-16 bg-white rounded-xl border-2 border-gray-100 border-dashed">
+            <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Filter className="text-gray-400" size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Sin resultados</h3>
             <p className="text-gray-500 font-medium">No se encontraron tareas con los filtros actuales.</p>
+            <button onClick={() => {setSearchTerm(''); setFilterStatus('all'); setFilterBranch('all');}} className="mt-4 text-blue-700 hover:text-blue-900 text-sm font-bold hover:underline">
+                Limpiar filtros
+            </button>
           </div>
         )}
       </div>
@@ -331,7 +350,6 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
         onSave={onCreateTask}
       />
       
-      {/* Modal de Evidencia */}
       {evidenceTask && (
         <EvidenceModal 
           isOpen={true}
