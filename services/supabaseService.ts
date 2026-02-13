@@ -65,6 +65,40 @@ export const createUser = async (user: User): Promise<User | null> => {
   };
 };
 
+export const updateUser = async (user: User): Promise<User | null> => {
+  const { data, error } = await supabase
+    .from('empleados')
+    .update({
+      nomina: user.payrollId,
+      nombre: user.name,
+      contrasena: user.password, // Be careful updating passwords in plain text in production
+      rol: user.role,
+      correo: user.email
+    })
+    .eq('id', user.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating user:', error);
+    return null;
+  }
+  
+  return {
+    ...user,
+    id: data.id
+  };
+};
+
+export const deleteUser = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.from('empleados').delete().eq('id', id);
+  if (error) {
+    console.error('Error deleting user:', error);
+    return false;
+  }
+  return true;
+};
+
 // Helper for Dev: Ensure Admin exists
 export const ensureAdminUser = async () => {
   // Check if admin already exists
@@ -118,8 +152,31 @@ export const createBranch = async (branch: Branch): Promise<Branch | null> => {
   return { ...branch, id: data.id };
 };
 
-export const deleteBranch = async (id: string) => {
-  await supabase.from('sucursales').delete().eq('id', id);
+export const updateBranch = async (branch: Branch): Promise<Branch | null> => {
+  const { data, error } = await supabase
+    .from('sucursales')
+    .update({
+      nombre: branch.name,
+      direccion: branch.address
+    })
+    .eq('id', branch.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating branch:', error);
+    return null;
+  }
+  return { ...branch, id: data.id };
+};
+
+export const deleteBranch = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.from('sucursales').delete().eq('id', id);
+  if (error) {
+    console.error("Error deleting branch", error);
+    return false;
+  }
+  return true;
 };
 
 // --- TASKS ---

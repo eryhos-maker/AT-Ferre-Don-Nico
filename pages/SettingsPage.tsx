@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Branch, Role } from '../types';
 import { Plus, Users, Building2, Trash2, Edit2, X, Hash, MapPin, Lock, Save } from 'lucide-react';
 
@@ -6,15 +6,50 @@ interface SettingsPageProps {
   users: User[];
   branches: Branch[];
   onAddUser: (user: User) => void;
-  onRemoveUser: (id: string) => void; // Optional logic
+  onUpdateUser: (user: User) => void;
+  onRemoveUser: (id: string) => void; 
   onAddBranch: (branch: Branch) => void;
+  onUpdateBranch: (branch: Branch) => void;
   onRemoveBranch: (id: string) => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ users, branches, onAddUser, onAddBranch, onRemoveBranch, onRemoveUser }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ 
+  users, 
+  branches, 
+  onAddUser, 
+  onUpdateUser,
+  onAddBranch, 
+  onUpdateBranch,
+  onRemoveBranch, 
+  onRemoveUser 
+}) => {
   const [activeTab, setActiveTab] = useState<'users' | 'branches'>('users');
+  
+  // User Modal State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  // Branch Modal State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+
+  const handleOpenUserModal = (user?: User) => {
+    if (user) {
+      setEditingUser(user);
+    } else {
+      setEditingUser(null);
+    }
+    setIsUserModalOpen(true);
+  };
+
+  const handleOpenBranchModal = (branch?: Branch) => {
+    if (branch) {
+      setEditingBranch(branch);
+    } else {
+      setEditingBranch(null);
+    }
+    setIsBranchModalOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -51,7 +86,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ users, branches, onAddUser,
            <div className="p-6">
              <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-gray-900">Directorio de Personal</h3>
-                <button onClick={() => setIsUserModalOpen(true)} className="bg-blue-800 hover:bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-colors">
+                <button onClick={() => handleOpenUserModal()} className="bg-blue-800 hover:bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-colors">
                    <Plus size={16} /> Agregar Miembro
                 </button>
              </div>
@@ -85,8 +120,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ users, branches, onAddUser,
                          </td>
                          <td className="px-4 py-3 text-sm text-gray-800 font-medium">{u.branch || '-'}</td>
                          <td className="px-4 py-3 text-right">
-                            <button className="text-gray-500 hover:text-blue-700 p-1 transition-colors"><Edit2 size={16}/></button>
-                            <button className="text-gray-500 hover:text-red-700 p-1 ml-2 transition-colors"><Trash2 size={16}/></button>
+                            <button 
+                              onClick={() => handleOpenUserModal(u)}
+                              className="text-gray-500 hover:text-blue-700 p-1 transition-colors"
+                              title="Editar Usuario"
+                            >
+                              <Edit2 size={16}/>
+                            </button>
+                            <button 
+                              onClick={() => onRemoveUser(u.id)}
+                              className="text-gray-500 hover:text-red-700 p-1 ml-2 transition-colors"
+                              title="Eliminar Usuario"
+                            >
+                              <Trash2 size={16}/>
+                            </button>
                          </td>
                       </tr>
                     ))}
@@ -101,21 +148,34 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ users, branches, onAddUser,
           <div className="p-6">
              <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-gray-900">Catálogo de Sucursales</h3>
-                <button onClick={() => setIsBranchModalOpen(true)} className="bg-blue-800 hover:bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-colors">
+                <button onClick={() => handleOpenBranchModal()} className="bg-blue-800 hover:bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-colors">
                    <Plus size={16} /> Nueva Sucursal
                 </button>
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {branches.map(branch => (
-                  <div key={branch.id} className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg hover:border-blue-300 transition-all group">
+                  <div key={branch.id} className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg hover:border-blue-300 transition-all group relative">
                      <div className="flex justify-between items-start mb-2">
                         <div className="p-2 bg-indigo-100 text-indigo-800 rounded-lg">
                            <Building2 size={24} />
                         </div>
-                        <button onClick={() => onRemoveBranch(branch.id)} className="text-gray-400 hover:text-red-600 transition-colors">
-                           <Trash2 size={16} />
-                        </button>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => handleOpenBranchModal(branch)} 
+                            className="text-gray-400 hover:text-blue-600 transition-colors p-1"
+                            title="Editar Sucursal"
+                          >
+                             <Edit2 size={16} />
+                          </button>
+                          <button 
+                            onClick={() => onRemoveBranch(branch.id)} 
+                            className="text-gray-400 hover:text-red-600 transition-colors p-1"
+                            title="Eliminar Sucursal"
+                          >
+                             <Trash2 size={16} />
+                          </button>
+                        </div>
                      </div>
                      <h4 className="font-bold text-gray-900 text-lg">{branch.name}</h4>
                      <div className="flex items-center gap-2 text-sm text-gray-600 font-medium mt-1">
@@ -129,22 +189,36 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ users, branches, onAddUser,
         )}
       </div>
 
-      {/* ADD USER MODAL */}
+      {/* ADD/EDIT USER MODAL */}
       {isUserModalOpen && (
         <UserModal 
            isOpen={isUserModalOpen} 
            onClose={() => setIsUserModalOpen(false)} 
-           onSave={onAddUser}
+           onSave={(data) => {
+             if (editingUser) {
+               onUpdateUser({...data, id: editingUser.id});
+             } else {
+               onAddUser(data);
+             }
+           }}
            branches={branches}
+           initialData={editingUser}
         />
       )}
 
-      {/* ADD BRANCH MODAL */}
+      {/* ADD/EDIT BRANCH MODAL */}
       {isBranchModalOpen && (
         <BranchModal 
            isOpen={isBranchModalOpen} 
            onClose={() => setIsBranchModalOpen(false)}
-           onSave={onAddBranch}
+           onSave={(data) => {
+             if (editingBranch) {
+               onUpdateBranch({...data, id: editingBranch.id});
+             } else {
+               onAddBranch(data);
+             }
+           }}
+           initialData={editingBranch}
         />
       )}
 
@@ -154,7 +228,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ users, branches, onAddUser,
 
 // --- Sub-Components for Modals ---
 
-const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (u: User) => void; branches: Branch[] }> = ({ isOpen, onClose, onSave, branches }) => {
+const UserModal: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSave: (u: User) => void; 
+  branches: Branch[];
+  initialData?: User | null;
+}> = ({ isOpen, onClose, onSave, branches, initialData }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>(Role.ENCARGADO_BEREL);
@@ -162,12 +242,24 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (u: Us
   const [payrollId, setPayrollId] = useState('');
   const [password, setPassword] = useState('');
 
+  // Load initial data for editing
+  useEffect(() => {
+    if (initialData) {
+      setName(initialData.name);
+      setEmail(initialData.email);
+      setRole(initialData.role);
+      setBranch(initialData.branch || '');
+      setPayrollId(initialData.payrollId);
+      setPassword(initialData.password || '');
+    }
+  }, [initialData]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      id: `u${Date.now()}`,
+      id: initialData ? initialData.id : `u${Date.now()}`, // ID is ignored on update service usually if handled by wrapper
       payrollId, name, email, role, branch, password,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff`
     });
@@ -178,7 +270,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (u: Us
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-gray-300">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-100 rounded-t-xl">
-             <h3 className="font-black text-gray-900 text-lg">Nuevo Miembro</h3>
+             <h3 className="font-black text-gray-900 text-lg">{initialData ? 'Editar Miembro' : 'Nuevo Miembro'}</h3>
              <button onClick={onClose}><X className="text-gray-500 hover:text-red-600" /></button>
           </div>
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -201,7 +293,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (u: Us
              <div>
                 <label className="text-sm font-bold text-gray-800 block mb-1">Contraseña de Acceso</label>
                 <div className="relative">
-                   <input required type="password" className="w-full border-2 border-gray-300 bg-gray-50 text-gray-900 rounded-lg pl-10 pr-3 py-2 focus:border-blue-600 focus:bg-white outline-none transition-colors" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+                   <input required={!initialData} type="password" className="w-full border-2 border-gray-300 bg-gray-50 text-gray-900 rounded-lg pl-10 pr-3 py-2 focus:border-blue-600 focus:bg-white outline-none transition-colors" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
                    <Lock size={16} className="absolute left-3 top-3 text-gray-500" />
                 </div>
              </div>
@@ -223,7 +315,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (u: Us
 
              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2">
                 <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 font-bold hover:bg-gray-200 rounded-lg transition-colors">Cancelar</button>
-                <button type="submit" className="px-4 py-2 bg-blue-800 text-white font-bold rounded-lg hover:bg-blue-900 transition-colors shadow-sm">Guardar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-800 text-white font-bold rounded-lg hover:bg-blue-900 transition-colors shadow-sm">{initialData ? 'Actualizar' : 'Guardar'}</button>
              </div>
           </form>
        </div>
@@ -231,9 +323,21 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (u: Us
   )
 }
 
-const BranchModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (b: Branch) => void }> = ({ isOpen, onClose, onSave }) => {
+const BranchModal: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSave: (b: Branch) => void;
+  initialData?: Branch | null; 
+}> = ({ isOpen, onClose, onSave, initialData }) => {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+
+  useEffect(() => {
+    if (initialData) {
+      setName(initialData.name);
+      setAddress(initialData.address || '');
+    }
+  }, [initialData]);
 
   if (!isOpen) return null;
 
@@ -241,10 +345,18 @@ const BranchModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (b: 
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-gray-300">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-100 rounded-t-xl">
-             <h3 className="font-black text-gray-900 text-lg">Nueva Sucursal</h3>
+             <h3 className="font-black text-gray-900 text-lg">{initialData ? 'Editar Sucursal' : 'Nueva Sucursal'}</h3>
              <button onClick={onClose}><X className="text-gray-500 hover:text-red-600" /></button>
           </div>
-          <form onSubmit={(e) => { e.preventDefault(); onSave({ id: `b${Date.now()}`, name, address }); onClose(); }} className="p-6 space-y-4">
+          <form onSubmit={(e) => { 
+              e.preventDefault(); 
+              onSave({ 
+                id: initialData ? initialData.id : `b${Date.now()}`, 
+                name, 
+                address 
+              }); 
+              onClose(); 
+            }} className="p-6 space-y-4">
              <div>
                 <label className="text-sm font-bold text-gray-800 block mb-1">Nombre Sucursal</label>
                 <input required className="w-full border-2 border-gray-300 bg-gray-50 text-gray-900 rounded-lg px-3 py-2 focus:border-blue-600 focus:bg-white outline-none transition-colors" value={name} onChange={e => setName(e.target.value)} />
@@ -255,7 +367,7 @@ const BranchModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (b: 
              </div>
              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2">
                 <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 font-bold hover:bg-gray-200 rounded-lg transition-colors">Cancelar</button>
-                <button type="submit" className="px-4 py-2 bg-blue-800 text-white font-bold rounded-lg hover:bg-blue-900 transition-colors shadow-sm">Guardar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-800 text-white font-bold rounded-lg hover:bg-blue-900 transition-colors shadow-sm">{initialData ? 'Actualizar' : 'Guardar'}</button>
              </div>
           </form>
        </div>

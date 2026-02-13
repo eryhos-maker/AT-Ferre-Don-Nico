@@ -15,7 +15,10 @@ import {
   fetchTasks, 
   createTask as apiCreateTask, 
   createUser as apiCreateUser,
+  updateUser as apiUpdateUser,
+  deleteUser as apiDeleteUser,
   createBranch as apiCreateBranch,
+  updateBranch as apiUpdateBranch,
   deleteBranch as apiDeleteBranch,
   updateTaskStatus as apiUpdateStatus,
   updateTaskEvidence as apiUpdateEvidence
@@ -191,34 +194,58 @@ const App: React.FC = () => {
     await apiUpdateEvidence(taskId, evidenceUrl);
   };
 
-  // User Management
+  // --- User Management ---
   const handleAddUser = async (newUser: User) => {
     const savedUser = await apiCreateUser(newUser);
     if (savedUser) {
-      setUsers([...users, savedUser]);
+      setUsers(prev => [...prev, savedUser]);
+    }
+  };
+
+  const handleUpdateUser = async (updatedUser: User) => {
+    const result = await apiUpdateUser(updatedUser);
+    if (result) {
+       setUsers(prev => prev.map(u => u.id === updatedUser.id ? result : u));
     }
   };
   
-  const handleRemoveUser = (userId: string) => {
-     // Not implemented in DB service yet to prevent integrity issues
-     alert("Eliminar usuario deshabilitado por seguridad de datos.");
+  const handleRemoveUser = async (userId: string) => {
+     if (window.confirm("¿Estás seguro de eliminar este usuario?")) {
+        const success = await apiDeleteUser(userId);
+        if (success) {
+           setUsers(prev => prev.filter(u => u.id !== userId));
+        } else {
+           alert("No se pudo eliminar el usuario. Verifique que no tenga tareas asignadas.");
+        }
+     }
   };
 
-  // Branch Management
+  // --- Branch Management ---
   const handleAddBranch = async (newBranch: Branch) => {
     const savedBranch = await apiCreateBranch(newBranch);
     if (savedBranch) {
-      setBranches([...branches, savedBranch]);
+      setBranches(prev => [...prev, savedBranch]);
+    }
+  };
+
+  const handleUpdateBranch = async (updatedBranch: Branch) => {
+    const result = await apiUpdateBranch(updatedBranch);
+    if (result) {
+       setBranches(prev => prev.map(b => b.id === updatedBranch.id ? result : b));
     }
   };
 
   const handleRemoveBranch = async (branchId: string) => {
-    await apiDeleteBranch(branchId);
-    setBranches(branches.filter(b => b.id !== branchId));
+    if (window.confirm("¿Eliminar esta sucursal?")) {
+       const success = await apiDeleteBranch(branchId);
+       if (success) {
+          setBranches(prev => prev.filter(b => b.id !== branchId));
+       }
+    }
   };
 
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} users={users} />; // Pass users for fallback or context
+    return <LoginPage onLogin={handleLogin} users={users} />; 
   }
 
   if (isLoading) {
@@ -269,8 +296,10 @@ const App: React.FC = () => {
                   users={users} 
                   branches={branches}
                   onAddUser={handleAddUser}
+                  onUpdateUser={handleUpdateUser}
                   onRemoveUser={handleRemoveUser}
                   onAddBranch={handleAddBranch}
+                  onUpdateBranch={handleUpdateBranch}
                   onRemoveBranch={handleRemoveBranch}
                 /> : <Navigate to="/tasks" />
               } 

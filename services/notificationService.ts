@@ -24,33 +24,31 @@ export const sendOverdueNotification = (task: Task, allUsers: User[]) => {
 };
 
 export const sendUpcomingDeadlineNotification = (task: Task, allUsers: User[]) => {
-  // Roles específicos solicitados: Supervisor Comercial y Encargado Berel
-  // SOLO si están asignados a la tarea o si son responsables generales (aquí asumimos responsables generales por rol)
-  // Ajuste: Notificar a usuarios con estos roles, independientemente de si están asignados explícitamente, 
-  // O filtrar solo si están en assignedTo. 
-  // Interpretación: "cuando una tarea asignada a ellos" -> Filtrar por asignación + Rol.
-
-  const assignedUsersIds = task.assignedTo;
+  // Requerimiento: Notificar a Supervisor Comercial y Encargado Berel
+  // SOLO si están asignados a la tarea específica y faltan 24h o menos.
   
-  const targetUsers = allUsers.filter(u => 
-    assignedUsersIds.includes(u.id) && 
-    (u.role === Role.SUPERVISOR_COM || u.role === Role.ENCARGADO_BEREL)
+  const targetRoles = [Role.SUPERVISOR_COM, Role.ENCARGADO_BEREL];
+
+  const recipients = allUsers.filter(u => 
+    task.assignedTo.includes(u.id) && targetRoles.includes(u.role)
   );
 
-  if (targetUsers.length === 0) return; // No hay destinatarios que cumplan la condición
+  // Si no hay usuarios con esos roles asignados a esta tarea, no enviamos correo.
+  if (recipients.length === 0) return;
 
-  const recipientEmails = targetUsers.map(u => u.email).join(', ');
+  const recipientEmails = recipients.map(u => u.email).join(', ');
 
   console.group(`📧 [SIMULACIÓN CORREO] Próximo Vencimiento (24h): ${task.folio}`);
   console.log(`To: ${recipientEmails}`);
-  console.log(`Subject: RECORDATORIO - Tarea por vencer: ${task.title}`);
+  console.log(`Subject: ⚠️ RECORDATORIO - Tarea por vencer: ${task.title}`);
   console.log(`----------------------------------------`);
   console.log(`Estimado colaborador,`);
   console.log(`\nLa tarea "${task.title}" vence en menos de 24 horas.`);
+  console.log(`\nEsta notificación es exclusiva para Supervisores y Encargados asignados.`);
   console.log(`\nDetalles:`);
   console.log(`- Folio: ${task.folio}`);
   console.log(`- Fecha Vencimiento: ${new Date(task.dueDate).toLocaleString()}`);
-  console.log(`\nPor favor asegurar su cumplimiento.`);
+  console.log(`\nPor favor asegurar su cumplimiento a tiempo.`);
   console.log(`----------------------------------------`);
   console.groupEnd();
 };
