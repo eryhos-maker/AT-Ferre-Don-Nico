@@ -145,6 +145,8 @@ const App: React.FC = () => {
     
     if (newTask.isRecurring && newTask.recurringDays && newTask.recurringDays.length > 0 && newTask.dueDate) {
        const startDate = new Date();
+       // FIX: Start recurring tasks from tomorrow (day + 1) to avoid creating a task for the current day.
+       startDate.setDate(startDate.getDate() + 1); 
        startDate.setHours(0,0,0,0);
        
        const endDate = new Date(newTask.dueDate);

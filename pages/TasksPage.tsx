@@ -19,16 +19,40 @@ const EvidenceModal: React.FC<{
   taskTitle: string 
 }> = ({ isOpen, onClose, onSave, taskTitle }) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   if (!isOpen) return null;
 
-  const handleSimulateUpload = () => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+      
+      if (!selectedFile.type.startsWith('image/') && selectedFile.type !== 'application/pdf') {
+         setErrorMsg("⚠️ Formato no permitido. Solo se aceptan imágenes y PDF.");
+         setFile(null);
+         e.target.value = ''; // Reset input
+         return;
+      }
+
+      setFile(selectedFile);
+      setErrorMsg(null);
+    }
+  };
+
+  const handleUploadAndSave = () => {
+    if (!file) {
+      setErrorMsg("⚠️ Acción bloqueada: No se ha subido ningún archivo permitido (PDF/Imagen) para completar esta tarea.");
+      return;
+    }
+
     setIsUploading(true);
-    // Simular delay de red
+    // Simular subida
     setTimeout(() => {
       setIsUploading(false);
       // Simular URL generada
-      const dummyUrl = "https://example.com/evidencia-" + Math.floor(Math.random() * 1000) + ".pdf";
+      const dummyUrl = "https://example.com/evidencia-" + Math.floor(Math.random() * 1000) + "-" + file.name;
       onSave(dummyUrl);
       onClose();
     }, 1500);
@@ -49,20 +73,37 @@ const EvidenceModal: React.FC<{
           </p>
         </div>
 
-        <div className="border-2 border-dashed border-gray-400 rounded-xl p-8 flex flex-col items-center justify-center gap-3 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group" onClick={handleSimulateUpload}>
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm font-bold flex items-center gap-2 animate-pulse shadow-sm">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        <div className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 transition-colors group relative ${errorMsg ? 'border-red-300 bg-red-50' : 'border-gray-400 bg-gray-50 hover:bg-gray-100'}`}>
+          <input 
+            type="file" 
+            accept="image/*,application/pdf"
+            onChange={handleFileChange}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          />
           <div className="p-4 bg-white rounded-full shadow-md group-hover:scale-110 transition-transform border border-gray-200">
-             <Upload className="text-blue-600" size={24} />
+             {file ? <FileText className="text-green-600" size={24} /> : <Upload className="text-blue-600" size={24} />}
           </div>
           <div className="text-center">
-             <p className="text-sm font-bold text-gray-800">Haga clic para subir archivo</p>
-             <p className="text-xs text-gray-500 font-medium">PDF, JPG, PNG (Max 5MB)</p>
+             <p className="text-sm font-bold text-gray-800">
+                {file ? file.name : "Haga clic para seleccionar archivo"}
+             </p>
+             <p className="text-xs text-gray-500 font-medium">
+                {file ? `${(file.size / 1024).toFixed(1)} KB` : "PDF, JPG, PNG (Max 5MB)"}
+             </p>
           </div>
         </div>
 
         <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
            <button onClick={onClose} className="px-4 py-2 text-gray-700 font-bold hover:bg-gray-200 rounded-lg text-sm transition-colors">Cancelar</button>
            <button 
-             onClick={handleSimulateUpload} 
+             onClick={handleUploadAndSave} 
              disabled={isUploading}
              className="px-4 py-2 bg-blue-700 text-white rounded-lg text-sm font-bold hover:bg-blue-800 disabled:opacity-50 flex items-center gap-2 shadow-sm"
            >
@@ -150,13 +191,13 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
   const getTaskCardStyles = (status: TaskStatus) => {
     switch (status) {
         case TaskStatus.COMPLETED:
-            return 'border-l-green-500 hover:shadow-green-100';
+            return 'border-l-green-500 bg-green-50/40 border-green-200/60 hover:shadow-green-100';
         case TaskStatus.OVERDUE:
-            return 'border-l-red-500 bg-red-50/40 hover:shadow-red-100';
+            return 'border-l-red-500 bg-red-50/60 border-red-200/60 hover:shadow-red-100';
         case TaskStatus.IN_PROGRESS:
-            return 'border-l-blue-500 bg-blue-50/30 hover:shadow-blue-100';
+            return 'border-l-blue-500 bg-blue-50/40 border-blue-200/60 hover:shadow-blue-100';
         default: // PENDING
-            return 'border-l-gray-400 hover:shadow-gray-100';
+            return 'border-l-gray-400 bg-white border-gray-200 hover:shadow-gray-100';
     }
   };
 
@@ -290,20 +331,20 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
             const cardStyles = getTaskCardStyles(task.status);
 
             return (
-          <div key={task.id} className={`relative bg-white p-5 rounded-xl border border-gray-200 border-l-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${cardStyles} group`}>
+          <div key={task.id} className={`relative p-5 rounded-xl border border-l-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${cardStyles} group`}>
             
             <div className="flex flex-col md:flex-row justify-between gap-4">
               <div className="flex-1">
                 {/* Header Row: Folio, Priority, Evidence Badge */}
                 <div className="flex items-center flex-wrap gap-2 mb-3">
-                  <span className="flex items-center gap-1 bg-white text-gray-600 text-[10px] px-2 py-1 rounded-md font-mono border border-gray-200 font-bold tracking-tight shadow-sm" title="Folio de Seguimiento">
+                  <span className="flex items-center gap-1 bg-white/50 text-gray-700 text-[10px] px-2 py-1 rounded-md font-mono border border-gray-200/50 font-bold tracking-tight shadow-sm" title="Folio de Seguimiento">
                       <Hash size={10} /> {task.folio}
                   </span>
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm ${getPriorityColor(task.priority)}`}>
                     {task.priority}
                   </span>
                   {task.requiresEvidence && (
-                      <span className="flex items-center gap-1 bg-orange-50 text-orange-700 text-[10px] px-2 py-0.5 rounded-md font-bold border border-orange-200">
+                      <span className="flex items-center gap-1 bg-orange-100/80 text-orange-800 text-[10px] px-2 py-0.5 rounded-md font-bold border border-orange-200/50">
                         <FileText size={10} /> Evidencia
                       </span>
                   )}
@@ -311,12 +352,12 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                 
                 {/* Title & Description */}
                 <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight group-hover:text-blue-800 transition-colors">{task.title}</h3>
-                <p className="text-gray-600 text-sm mb-4 line-clamp-2 font-medium leading-relaxed">{task.description}</p>
+                <p className="text-gray-700 text-sm mb-4 line-clamp-2 font-medium leading-relaxed">{task.description}</p>
                 
                 {/* Progress Bar (if subtasks exist) */}
                 {totalSubtasks > 0 && (
-                    <div className="mb-4 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                        <div className="flex items-center justify-between text-xs text-gray-600 font-bold mb-1">
+                    <div className="mb-4 bg-white/50 p-2 rounded-lg border border-gray-200/50">
+                        <div className="flex items-center justify-between text-xs text-gray-700 font-bold mb-1">
                             <span className="flex items-center gap-1"><ListTodo size={12}/> Progreso</span>
                             <span>{Math.round(subtaskProgress)}%</span>
                         </div>
@@ -330,23 +371,23 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                 )}
 
                 {/* Footer: Assignee, Date, Evidence Link */}
-                <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-gray-500 font-medium pt-2 border-t border-gray-100/50">
-                  <div className="flex items-center gap-2 bg-gray-50 pr-3 rounded-full border border-gray-100">
+                <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-gray-600 font-medium pt-2 border-t border-gray-200/40">
+                  <div className="flex items-center gap-2 pr-3 rounded-full">
                     <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-black shadow-sm">
                        {getFirstAssigneeInitial(task.assignedTo)}
                     </div>
-                    <span className="text-xs text-gray-700">{getAssignedNames(task.assignedTo)}</span>
+                    <span className="text-xs text-gray-800">{getAssignedNames(task.assignedTo)}</span>
                   </div>
 
-                  <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'bg-red-50 text-red-700 border-red-100' : 'bg-gray-50 text-gray-600 border-gray-100'}`}>
+                  <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white/60 text-gray-700 border-gray-200/60'}`}>
                     <Calendar size={14} />
-                    <span>{new Date(task.dueDate).toLocaleDateString()} <span className="text-gray-400">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span>{new Date(task.dueDate).toLocaleDateString()} <span className="opacity-60">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
 
                   {task.evidenceUrl && (
                     <a 
                       href="#" 
-                      className="flex items-center gap-1 text-blue-700 hover:text-blue-900 hover:underline text-xs bg-blue-50/50 px-2 py-1 rounded border border-blue-100 font-bold transition-colors ml-auto md:ml-0"
+                      className="flex items-center gap-1 text-blue-800 hover:text-blue-900 hover:underline text-xs bg-blue-100/50 px-2 py-1 rounded border border-blue-200/50 font-bold transition-colors ml-auto md:ml-0"
                       onClick={(e) => { e.preventDefault(); alert("Abriendo evidencia: " + task.evidenceUrl); }}
                     >
                       <ExternalLink size={12} /> Ver Evidencia
@@ -356,13 +397,13 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
               </div>
 
               {/* Status Action Column */}
-              <div className="flex md:flex-col items-center justify-between md:justify-start gap-3 border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:pl-6 min-w-[180px]">
+              <div className="flex md:flex-col items-center justify-between md:justify-start gap-3 border-t md:border-t-0 md:border-l border-gray-200/40 pt-4 md:pt-0 md:pl-6 min-w-[180px]">
                  <div className="flex items-center gap-2 w-full md:w-auto justify-center md:justify-start">
                     {getStatusIcon(task.status)}
                     <span className={`text-sm font-bold capitalize ${
-                        task.status === TaskStatus.COMPLETED ? 'text-green-700' :
-                        task.status === TaskStatus.OVERDUE ? 'text-red-700' :
-                        task.status === TaskStatus.IN_PROGRESS ? 'text-blue-700' : 'text-gray-700'
+                        task.status === TaskStatus.COMPLETED ? 'text-green-800' :
+                        task.status === TaskStatus.OVERDUE ? 'text-red-800' :
+                        task.status === TaskStatus.IN_PROGRESS ? 'text-blue-800' : 'text-gray-800'
                     }`}>
                         {task.status.replace('_', ' ')}
                     </span>
@@ -372,16 +413,16 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                     <select
                       value={task.status}
                       onChange={(e) => handleStatusChangeAttempt(task, e.target.value)}
-                      className="w-full appearance-none px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm text-gray-800 font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer hover:border-gray-400 transition-colors shadow-sm"
+                      className="w-full appearance-none px-3 py-2 bg-white/80 backdrop-blur-sm border-2 border-gray-300 rounded-lg text-sm text-gray-800 font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer hover:border-gray-400 transition-colors shadow-sm"
                     >
                       {Object.values(TaskStatus).map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
-                    <MoreVertical size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <MoreVertical size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                  </div>
                  
-                 <p className="text-[10px] text-center text-gray-400 leading-tight hidden md:block mt-auto">
+                 <p className="text-[10px] text-center text-gray-500 leading-tight hidden md:block mt-auto font-medium">
                     Cambiar el estado notificará a los asignados.
                  </p>
               </div>
@@ -416,7 +457,10 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
         <EvidenceModal 
           isOpen={true}
           taskTitle={evidenceTask.title}
-          onClose={() => setEvidenceTask(null)}
+          onClose={() => {
+            setEvidenceTask(null);
+            // Si el usuario cierra sin guardar, el estado no cambia (ya que el cambio de estado se detuvo en handleStatusChangeAttempt)
+          }}
           onSave={(url) => {
              onSaveEvidence(evidenceTask.id, url);
              setEvidenceTask(null);
