@@ -14,6 +14,7 @@ import {
   fetchBranches, 
   fetchTasks, 
   createTask as apiCreateTask, 
+  updateTask as apiUpdateTask, // Import new updateTask
   createUser as apiCreateUser,
   updateUser as apiUpdateUser,
   deleteUser as apiDeleteUser,
@@ -164,18 +165,18 @@ const App: React.FC = () => {
        }
     }
 
-    // Determine Branch based on Assignee
-    // We look up the first assigned user to get their branch
-    let taskBranch = '';
-    
-    // Find Branch ID if we have branches loaded
-    if (newTask.assignedTo && newTask.assignedTo.length > 0) {
+    // Determine Branch logic
+    // Priority: Explicitly selected Branch -> Assignee's Branch -> General
+    let taskBranch = newTask.branch;
+
+    if (!taskBranch && newTask.assignedTo && newTask.assignedTo.length > 0) {
        const assignee = users.find(u => u.id === newTask.assignedTo![0]);
        if (assignee && assignee.branch) {
-          const foundBranch = branches.find(b => b.name === assignee.branch);
-          taskBranch = foundBranch ? foundBranch.id : assignee.branch; 
+          taskBranch = assignee.branch; 
        }
     }
+
+    if (!taskBranch) taskBranch = 'General';
 
     // Basic Task Structure
     const baseTask: Partial<Task> = {
@@ -185,7 +186,7 @@ const App: React.FC = () => {
       status: TaskStatus.PENDING,
       attachmentUrl: attachmentUrl || newTask.attachmentUrl,
       evidenceUrl: '', // Empty initially
-      branch: taskBranch // Save branch ID!
+      branch: taskBranch // Save branch
     };
 
     const createdTasks: Task[] = [];
@@ -233,6 +234,31 @@ const App: React.FC = () => {
 
     if (createdTasks.length > 0) {
       setTasks(prev => [...createdTasks, ...prev]);
+    }
+  };
+
+  const handleUpdateTask = async (taskToUpdate: Partial<Task>, attachmentFile?: File) => {
+    let attachmentUrl = taskToUpdate.attachmentUrl;
+
+    // 1. Upload new Attachment if present
+    if (attachmentFile) {
+       const url = await uploadFile(attachmentFile, 'attachments');
+       if (url) {
+          attachmentUrl = url;
+       }
+    }
+
+    const updatedTaskData = {
+        ...taskToUpdate,
+        attachmentUrl
+    };
+
+    // Call API
+    const result = await apiUpdateTask(updatedTaskData);
+    
+    if (result) {
+        // Update Local State
+        setTasks(prev => prev.map(t => t.id === result.id ? result : t));
     }
   };
 
@@ -357,8 +383,10 @@ const App: React.FC = () => {
                 <TasksPage 
                   tasks={visibleTasks} 
                   users={users} 
+                  branches={branches} // Pass branches
                   currentUser={currentUser} 
                   onCreateTask={handleCreateTask}
+                  onUpdateTask={handleUpdateTask} // Pass update handler
                   onUpdateStatus={handleUpdateStatus}
                   onDeleteTask={handleDeleteTask}
                   onSaveEvidence={handleSaveEvidence}

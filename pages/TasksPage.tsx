@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Task, User, TaskStatus, Priority, Role } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye, Paperclip } from 'lucide-react';
+import { Task, User, TaskStatus, Priority, Role, Branch } from '../types';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye, Paperclip, Edit2 } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
   tasks: Task[];
   users: User[];
+  branches: Branch[];
   currentUser: User;
-  onCreateTask: (task: Partial<Task>) => void;
+  onCreateTask: (task: Partial<Task>, attachment?: File) => void;
+  onUpdateTask: (task: Partial<Task>, attachment?: File) => void;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
   onSaveEvidence: (taskId: string, file: File) => void;
@@ -175,7 +177,7 @@ const ConfirmationModal: React.FC<{
   );
 };
 
-const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCreateTask, onUpdateStatus, onDeleteTask, onSaveEvidence }) => {
+const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUser, onCreateTask, onUpdateTask, onUpdateStatus, onDeleteTask, onSaveEvidence }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>(TaskStatus.PENDING);
   const [filterBranch, setFilterBranch] = useState<string>('all');
@@ -185,6 +187,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
   const [evidenceTask, setEvidenceTask] = useState<Task | null>(null);
   const [confirmationData, setConfirmationData] = useState<{task: Task, newStatus: TaskStatus} | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
 
   // Authorization checks
   const canCreateTask = ![Role.SUPERVISOR_COM, Role.ENCARGADO_BEREL].includes(currentUser.role);
@@ -195,6 +198,16 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
   const isBranchRestricted = [Role.ENCARGADO_BEREL, Role.SUPERVISOR_COM].includes(currentUser.role);
 
   const availableBranches = Array.from(new Set(users.map(u => u.branch).filter(Boolean))) as string[];
+
+  const handleOpenCreateModal = () => {
+    setTaskToEdit(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (task: Task) => {
+    setTaskToEdit(task);
+    setIsModalOpen(true);
+  };
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
@@ -302,7 +315,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
         </div>
         {canCreateTask && (
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenCreateModal}
             className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md transition-colors font-bold"
           >
             <Plus size={20} />
@@ -381,7 +394,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
             
             <div className="flex flex-col md:flex-row justify-between gap-4">
               <div className="flex-1">
-                {/* Header Row: Folio, Priority, Evidence Badge, Delete Button */}
+                {/* Header Row: Folio, Priority, Evidence Badge, Buttons */}
                 <div className="flex items-center justify-between mb-3">
                    <div className="flex items-center flex-wrap gap-2">
                     <span className="flex items-center gap-1 bg-white/50 text-gray-700 text-[10px] px-2 py-1 rounded-md font-mono border border-gray-200/50 font-bold tracking-tight shadow-sm" title="Folio de Seguimiento">
@@ -397,16 +410,29 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                     )}
                    </div>
                    
-                   {/* Delete Button - Only for Admin/Gerente */}
-                   {canDeleteTask && (
-                      <button 
-                        onClick={() => handleDeleteClick(task)}
-                        className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-red-50"
-                        title="Eliminar Tarea (Admin)"
-                      >
-                         <Trash2 size={16} />
-                      </button>
-                   )}
+                   <div className="flex items-center gap-1">
+                      {/* Edit Button - Enabled for creators */}
+                      {canCreateTask && (
+                        <button
+                          onClick={() => handleOpenEditModal(task)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors p-1 rounded-full hover:bg-blue-50"
+                          title="Editar Tarea"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      )}
+                      
+                      {/* Delete Button - Only for Admin/Gerente */}
+                      {canDeleteTask && (
+                          <button 
+                            onClick={() => handleDeleteClick(task)}
+                            className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-red-50"
+                            title="Eliminar Tarea (Admin)"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      )}
+                   </div>
                 </div>
                 
                 {/* Title & Description */}
@@ -429,7 +455,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                     </div>
                 )}
 
-                {/* Footer: Assignee, Date, Evidence Link */}
+                {/* Footer: Assignee, Date, Branch, Links */}
                 <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-gray-600 font-medium pt-2 border-t border-gray-200/40">
                   <div className="flex items-center gap-2 pr-3 rounded-full">
                     <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-black shadow-sm">
@@ -443,12 +469,20 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                     <span>{new Date(task.dueDate).toLocaleDateString()} <span className="opacity-60">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
 
+                  {/* Branch Display */}
+                  {task.branch && task.branch !== 'General' && (
+                     <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-gray-50 border-gray-200 text-gray-600">
+                        <MapPin size={12} />
+                        <span className="truncate max-w-[100px]" title={task.branch}>{task.branch}</span>
+                     </div>
+                  )}
+
                   {task.attachmentUrl && (
                     <a 
                       href={task.attachmentUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors"
+                      className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors ml-auto md:ml-0"
                       title="Descargar Archivo Adjunto (Soporte)"
                     >
                       <Paperclip size={12} /> 
@@ -519,10 +553,18 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
 
       <TaskModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { setIsModalOpen(false); setTaskToEdit(null); }}
         users={users}
+        branches={branches}
         currentUser={currentUser}
-        onSave={onCreateTask}
+        onSave={(data, file) => {
+            if (taskToEdit) {
+                onUpdateTask(data, file);
+            } else {
+                onCreateTask(data, file);
+            }
+        }}
+        initialData={taskToEdit}
       />
       
       {/* Evidence Modal (Existing) */}
@@ -532,7 +574,6 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
           taskTitle={evidenceTask.title}
           onClose={() => {
             setEvidenceTask(null);
-            // Si el usuario cierra sin guardar, el estado no cambia (ya que el cambio de estado se detuvo en handleStatusChangeAttempt)
           }}
           onSave={(file) => {
              onSaveEvidence(evidenceTask.id, file);

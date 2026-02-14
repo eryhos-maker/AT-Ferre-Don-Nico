@@ -1,23 +1,28 @@
-import React, { useState } from 'react';
-import { X, Sparkles, Loader2, Calendar, FileCheck, Plus, Trash2, ListTodo, Users, Paperclip, Clock, Zap, ArrowRight, Sun, Moon, Briefcase } from 'lucide-react';
-import { User, Priority, Task, Subtask } from '../types';
+import React, { useState, useEffect } from 'react';
+import { X, Sparkles, Loader2, Calendar, FileCheck, Plus, Trash2, ListTodo, Users, Paperclip, Clock, Zap, ArrowRight, Sun, Moon, Briefcase, MapPin } from 'lucide-react';
+import { User, Priority, Task, Subtask, Branch } from '../types';
 import { analyzeTask } from '../services/geminiService';
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   users: User[];
+  branches?: Branch[]; // Para el selector de sucursales
   currentUser: User;
   onSave: (task: Partial<Task>, attachmentFile?: File) => void;
+  initialData?: Task | null; // Data si estamos editando
 }
 
-const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUser, onSave }) => {
+const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, branches = [], currentUser, onSave, initialData }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   
   // Asignación de Usuarios (1 o 2)
   const [primaryAssignee, setPrimaryAssignee] = useState('');
   const [secondaryAssignee, setSecondaryAssignee] = useState('');
+  
+  // Sucursal
+  const [selectedBranch, setSelectedBranch] = useState('');
 
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState<Priority>(Priority.MEDIUM);
@@ -45,6 +50,64 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
     { label: 'S', value: 6 },
   ];
 
+  // Effect to load initialData when editing
+  useEffect(() => {
+    if (initialData) {
+        setTitle(initialData.title);
+        setDescription(initialData.description);
+        
+        if (initialData.assignedTo && initialData.assignedTo.length > 0) {
+            setPrimaryAssignee(initialData.assignedTo[0]);
+            if (initialData.assignedTo.length > 1) {
+                setSecondaryAssignee(initialData.assignedTo[1]);
+            } else {
+                setSecondaryAssignee('');
+            }
+        }
+        
+        // Handle Date format for input datetime-local
+        if (initialData.dueDate) {
+            try {
+                const dateObj = new Date(initialData.dueDate);
+                // Adjust for timezone offset to show correct local time in input
+                const offset = dateObj.getTimezoneOffset() * 60000;
+                const localISOTime = (new Date(dateObj.getTime() - offset)).toISOString().slice(0, 16);
+                setDueDate(localISOTime);
+            } catch (e) {
+                setDueDate('');
+            }
+        }
+
+        setPriority(initialData.priority);
+        setSubtasks(initialData.subtasks || []);
+        setIsRecurring(!!initialData.isRecurring);
+        setSelectedDays(initialData.recurringDays || []);
+        setRequiresEvidence(!!initialData.requiresEvidence);
+        // Intentar matchear la sucursal por nombre o ID
+        if (initialData.branch) {
+            // Si el branch guardado coincide con un nombre de sucursal, úsalo, si no, busca por ID?
+            // Asumimos que guardamos el nombre o el ID. Tratamos de hacer match.
+            const match = branches.find(b => b.id === initialData.branch || b.name === initialData.branch);
+            if (match) setSelectedBranch(match.name);
+            else setSelectedBranch(initialData.branch); // Fallback to raw value
+        }
+    } else {
+        // Reset fields for New Task
+        setTitle('');
+        setDescription('');
+        setPrimaryAssignee('');
+        setSecondaryAssignee('');
+        setDueDate('');
+        setPriority(Priority.MEDIUM);
+        setSubtasks([]);
+        setIsRecurring(false);
+        setSelectedDays([]);
+        setRequiresEvidence(false);
+        setSelectedBranch(currentUser.branch || ''); // Default to user branch
+        setAttachment(null);
+    }
+  }, [initialData, isOpen, currentUser, branches]);
+
   if (!isOpen) return null;
 
   const handleAIAnalysis = async () => {
@@ -54,7 +117,6 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
       const result = await analyzeTask(title, description);
       setPriority(result.priority);
       
-      // Convert suggested steps into subtasks automatically
       const aiSubtasks: Subtask[] = result.suggestedSteps.map((step, index) => ({
         id: `ai-${Date.now()}-${index}`,
         title: step,
@@ -93,8 +155,6 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Validation: Allow Images, PDF, Excel
-      // Simple extension check is often more user-friendly than complex MIME types for mixed input
       const allowedExtensions = ['pdf', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'webp'];
       const fileExt = file.name.split('.').pop()?.toLowerCase();
 
@@ -102,12 +162,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
         setAttachment(file);
       } else {
         alert("Formato no soportado. Use: PDF, Excel, o Imágenes (JPG/PNG).");
-        e.target.value = ''; // Reset input
+        e.target.value = ''; 
       }
     }
   };
 
-  // Helper to set quick dates formatted for datetime-local input
   const setQuickDate = (type: 'today_end' | 'tomorrow_morning' | 'tomorrow_end' | 'next_monday') => {
     const now = new Date();
     const target = new Date(now);
@@ -126,13 +185,12 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
             break;
         case 'next_monday':
             const day = now.getDay();
-            const diff = now.getDate() - day + (day === 0 ? -6 : 1) + 7; // Next Monday
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1) + 7;
             target.setDate(diff);
             target.setHours(9, 0, 0, 0);
             break;
     }
 
-    // Adjust for timezone offset to ensure the input shows the correct local time
     const offset = target.getTimezoneOffset() * 60000;
     const localISOTime = (new Date(target.getTime() - offset)).toISOString().slice(0, 16);
     setDueDate(localISOTime);
@@ -147,17 +205,19 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
     }
 
     onSave({
+      id: initialData?.id, // Important: Pass ID if editing
       title,
       description,
-      assignedTo, // Array de IDs
+      assignedTo,
       dueDate: new Date(dueDate).toISOString(),
       priority,
-      createdBy: currentUser.id,
+      createdBy: initialData ? initialData.createdBy : currentUser.id, // Preserve creator if editing
       isRecurring,
       recurringDays: isRecurring ? selectedDays : [],
       requiresEvidence,
       subtasks,
-      attachmentName: attachment ? attachment.name : undefined,
+      attachmentName: attachment ? attachment.name : (initialData?.attachmentName),
+      branch: selectedBranch // Guardar la sucursal seleccionada
     }, attachment || undefined);
     
     onClose();
@@ -168,8 +228,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-300">
         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-100">
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <Plus className="text-blue-700" size={24} />
-            Nueva Tarea Operativa
+            {initialData ? <div className="text-orange-600"><Briefcase size={24} /></div> : <div className="text-blue-700"><Plus size={24} /></div>}
+            {initialData ? 'Editar Tarea' : 'Nueva Tarea Operativa'}
           </h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 transition-colors bg-gray-200 hover:bg-gray-300 rounded-full p-1">
             <X size={20} />
@@ -316,12 +376,32 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
                         </div>
                     </div>
 
+                    {/* Branch Selection */}
+                    <div className="bg-gray-50 p-3 rounded-lg border-2 border-gray-200">
+                        <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                            <MapPin size={12} /> Sucursal / Ubicación
+                        </label>
+                        <select
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-medium"
+                            value={selectedBranch}
+                            onChange={(e) => setSelectedBranch(e.target.value)}
+                        >
+                            <option value="">General / Sin Especificar</option>
+                            {branches.map(b => (
+                                <option key={b.id} value={b.name}>{b.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
                     {/* Attachment Section */}
                     <div className="bg-gray-50 p-3 rounded-lg border-2 border-gray-200">
                         <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-800">
                             <Paperclip size={16} />
-                            <span>Adjuntar Soporte (Opcional)</span>
+                            <span>Adjuntar Soporte {initialData?.attachmentName && '(Reemplazar)'}</span>
                         </div>
+                        {initialData?.attachmentName && !attachment && (
+                             <div className="mb-2 text-xs text-blue-700 font-medium">Actual: {initialData.attachmentName}</div>
+                        )}
                         <div className="relative">
                             <input
                                 type="file"
@@ -446,7 +526,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
             type="submit"
             className="px-6 py-2 bg-blue-700 text-white hover:bg-blue-800 rounded-lg text-sm font-bold shadow-lg shadow-blue-700/20 transition-all hover:scale-105 active:scale-95"
           >
-            Crear Tarea
+            {initialData ? 'Guardar Cambios' : 'Crear Tarea'}
           </button>
         </div>
       </div>
