@@ -85,10 +85,9 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, branches 
         setRequiresEvidence(!!initialData.requiresEvidence);
         // Intentar matchear la sucursal por nombre o ID
         if (initialData.branch) {
-            // Si el branch guardado coincide con un nombre de sucursal, úsalo, si no, busca por ID?
-            // Asumimos que guardamos el nombre o el ID. Tratamos de hacer match.
-            const match = branches.find(b => b.id === initialData.branch || b.name === initialData.branch);
-            if (match) setSelectedBranch(match.name);
+            // Updated to use nombre_sucursal
+            const match = branches.find(b => b.id === initialData.branch || b.nombre_sucursal === initialData.branch);
+            if (match) setSelectedBranch(match.nombre_sucursal);
             else setSelectedBranch(initialData.branch); // Fallback to raw value
         }
     } else {
@@ -352,7 +351,14 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, branches 
                                     required
                                     className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-medium"
                                     value={primaryAssignee}
-                                    onChange={(e) => setPrimaryAssignee(e.target.value)}
+                                    onChange={(e) => {
+                                      const userId = e.target.value;
+                                      setPrimaryAssignee(userId);
+                                      const user = users.find(u => u.id === userId);
+                                      if (user && user.branch) {
+                                          setSelectedBranch(user.branch);
+                                      }
+                                    }}
                                 >
                                     <option value="">Seleccionar...</option>
                                     {users.map(u => (
@@ -388,7 +394,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, branches 
                         >
                             <option value="">General / Sin Especificar</option>
                             {branches.map(b => (
-                                <option key={b.id} value={b.name}>{b.name}</option>
+                                <option key={b.id} value={b.nombre_sucursal}>{b.nombre_sucursal}</option>
                             ))}
                         </select>
                     </div>

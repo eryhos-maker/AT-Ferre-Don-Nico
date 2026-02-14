@@ -466,6 +466,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
 
                   <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white/60 text-gray-700 border-gray-200/60'}`}>
                     <Calendar size={14} />
+                    <span className="font-bold mr-1">Vence:</span>
                     <span>{new Date(task.dueDate).toLocaleDateString()} <span className="opacity-60">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
 
@@ -482,7 +483,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
                       href={task.attachmentUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors ml-auto md:ml-0"
+                      className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors"
                       title="Descargar Archivo Adjunto (Soporte)"
                     >
                       <Paperclip size={12} /> 

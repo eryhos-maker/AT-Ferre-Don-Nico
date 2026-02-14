@@ -41,7 +41,7 @@ export const fetchUsers = async (): Promise<User[]> => {
     email: emp.correo,
     password: emp.contrasena,
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.nombre)}&background=0D8ABC&color=fff`,
-    branch: emp.sucursal || '' 
+    branch: emp.nombre_sucursal || '' // Changed to match DB column
   }));
 };
 
@@ -52,7 +52,7 @@ export const createUser = async (user: User): Promise<User | null> => {
     contrasena: user.password || '123456',
     rol: user.role,
     correo: user.email,
-    sucursal: user.branch 
+    nombre_sucursal: user.branch // Changed to match DB column
   }).select().single();
 
   if (error) {
@@ -63,7 +63,7 @@ export const createUser = async (user: User): Promise<User | null> => {
   return {
     ...user,
     id: data.id,
-    branch: data.sucursal
+    branch: data.nombre_sucursal
   };
 };
 
@@ -76,7 +76,7 @@ export const updateUser = async (user: User): Promise<User | null> => {
       contrasena: user.password,
       rol: user.role,
       correo: user.email,
-      sucursal: user.branch 
+      nombre_sucursal: user.branch // Changed to match DB column
     })
     .eq('id', user.id)
     .select()
@@ -90,7 +90,7 @@ export const updateUser = async (user: User): Promise<User | null> => {
   return {
     ...user,
     id: data.id,
-    branch: data.sucursal
+    branch: data.nombre_sucursal
   };
 };
 
@@ -115,7 +115,7 @@ export const ensureAdminUser = async () => {
       contrasena: 'Donnico1',
       rol: 'Gerente', 
       correo: 'admin@ferredonnico.com',
-      sucursal: 'Corporativo'
+      nombre_sucursal: 'Corporativo' // Changed to match DB column
     });
     
     if (error) {
@@ -136,35 +136,38 @@ export const fetchBranches = async (): Promise<Branch[]> => {
     return [];
   }
 
-  // Mapeamos 'nombre_sucursal' de la BD a 'name' de la App
+  // Ahora mapeamos directamente a las propiedades de la interfaz que coinciden con la BD
   return data.map((suc: any) => ({
     id: suc.id,
-    name: suc.nombre_sucursal, 
-    address: suc.direccion
+    nombre_sucursal: suc.nombre_sucursal, 
+    direccion: suc.direccion
   }));
 };
 
 export const createBranch = async (branch: Branch): Promise<Branch | null> => {
-  // Mapeamos 'name' de la App a 'nombre_sucursal' de la BD
+  // Usamos las propiedades directas
   const { data, error } = await supabase.from('sucursales').insert({
-    nombre_sucursal: branch.name,
-    direccion: branch.address
+    nombre_sucursal: branch.nombre_sucursal,
+    direccion: branch.direccion
   }).select().single();
 
   if (error) {
     console.error('Error creating branch:', error);
     return null;
   }
-  return { ...branch, id: data.id };
+  return { 
+      id: data.id, 
+      nombre_sucursal: data.nombre_sucursal, 
+      direccion: data.direccion 
+  };
 };
 
 export const updateBranch = async (branch: Branch): Promise<Branch | null> => {
-  // Mapeamos 'name' de la App a 'nombre_sucursal' de la BD
   const { data, error } = await supabase
     .from('sucursales')
     .update({
-      nombre_sucursal: branch.name,
-      direccion: branch.address
+      nombre_sucursal: branch.nombre_sucursal,
+      direccion: branch.direccion
     })
     .eq('id', branch.id)
     .select()
@@ -174,7 +177,11 @@ export const updateBranch = async (branch: Branch): Promise<Branch | null> => {
     console.error('Error updating branch:', error);
     return null;
   }
-  return { ...branch, id: data.id };
+  return { 
+      id: data.id, 
+      nombre_sucursal: data.nombre_sucursal, 
+      direccion: data.direccion 
+  };
 };
 
 export const deleteBranch = async (id: string): Promise<boolean> => {
@@ -207,7 +214,7 @@ export const fetchTasks = async (): Promise<Task[]> => {
     status: mapStatusFromDB(t.status),
     priority: Priority.MEDIUM, 
     createdAt: t.created_at,
-    branch: t.sucursal || 'General', 
+    branch: t.nombre_sucursal || 'General', // Changed to match DB column
     evidenceUrl: t.evidencia_anexa_url,
     attachmentUrl: t.archivo_anexo_url,
     attachmentName: t.archivo_anexo_url ? 'Archivo Adjunto' : undefined,
@@ -236,7 +243,7 @@ export const createTask = async (task: Partial<Task>): Promise<Task | null> => {
     status: mapStatusToDB(task.status || TaskStatus.PENDING),
     archivo_anexo_url: task.attachmentUrl,
     evidencia_anexa_url: task.evidenceUrl,
-    sucursal: task.branch 
+    nombre_sucursal: task.branch // Changed to match DB column
   }).select().single();
 
   if (error) {
@@ -251,7 +258,7 @@ export const createTask = async (task: Partial<Task>): Promise<Task | null> => {
     status: mapStatusFromDB(data.status),
     title: data.tarea,
     description: data.tarea,
-    branch: data.sucursal
+    branch: data.nombre_sucursal
   } as Task;
 };
 
@@ -267,7 +274,7 @@ export const updateTask = async (task: Partial<Task>): Promise<Task | null> => {
   const updatePayload: any = {
     tarea: combinedTitle,
     fecha_hora_vencimiento: task.dueDate,
-    sucursal: task.branch
+    nombre_sucursal: task.branch // Changed to match DB column
   };
 
   if (assigneeId) {
@@ -296,7 +303,7 @@ export const updateTask = async (task: Partial<Task>): Promise<Task | null> => {
     status: mapStatusFromDB(data.status),
     title: data.tarea,
     description: data.tarea,
-    branch: data.sucursal
+    branch: data.nombre_sucursal
   } as Task;
 };
 

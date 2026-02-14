@@ -184,10 +184,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                           </button>
                         </div>
                      </div>
-                     <h4 className="font-bold text-gray-900 text-lg">{branch.name}</h4>
+                     <h4 className="font-bold text-gray-900 text-lg">{branch.nombre_sucursal}</h4>
                      <div className="flex items-center gap-2 text-sm text-gray-600 font-medium mt-1">
                         <MapPin size={14} />
-                        {branch.address || 'Sin dirección registrada'}
+                        {branch.direccion || 'Sin dirección registrada'}
                      </div>
                   </div>
                 ))}
@@ -316,7 +316,7 @@ const UserModal: React.FC<{
                <label className="text-sm font-bold text-gray-800 block mb-1">Sucursal</label>
                <select className="w-full border-2 border-gray-400 bg-gray-50 text-gray-900 font-medium rounded-lg px-3 py-2 focus:border-blue-600 outline-none transition-colors" value={branch} onChange={e => setBranch(e.target.value)}>
                  <option value="">Seleccionar...</option>
-                 {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                 {branches.map(b => <option key={b.id} value={b.nombre_sucursal}>{b.nombre_sucursal}</option>)}
                </select>
              </div>
 
@@ -341,8 +341,8 @@ const BranchModal: React.FC<{
 
   useEffect(() => {
     if (initialData) {
-      setName(initialData.name);
-      setAddress(initialData.address || '');
+      setName(initialData.nombre_sucursal);
+      setAddress(initialData.direccion || '');
     }
   }, [initialData]);
 
@@ -359,8 +359,8 @@ const BranchModal: React.FC<{
               e.preventDefault(); 
               onSave({ 
                 id: initialData ? initialData.id : `b${Date.now()}`, 
-                name, 
-                address 
+                nombre_sucursal: name, 
+                direccion: address 
               }); 
               onClose(); 
             }} className="p-6 space-y-4">

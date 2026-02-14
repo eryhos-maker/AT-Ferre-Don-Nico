@@ -25,8 +25,8 @@ export enum Priority {
 
 export interface Branch {
   id: string;
-  name: string;
-  address?: string;
+  nombre_sucursal: string; // Coincide con DB Supabase
+  direccion?: string;      // Coincide con DB Supabase
 }
 
 export interface User {

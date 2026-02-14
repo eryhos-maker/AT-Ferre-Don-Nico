@@ -58,11 +58,11 @@ export const USERS: User[] = [
 ];
 
 export const MOCK_BRANCHES: Branch[] = [
-  { id: 'b1', name: 'Corporativo Central', address: 'Av. Industrial 100' },
-  { id: 'b2', name: 'Planta Principal', address: 'Carretera Nacional Km 5' },
-  { id: 'b3', name: 'Sucursal Norte', address: 'Av. Universidad 500' },
-  { id: 'b4', name: 'Berel Centro', address: 'Calle Morelos 230' },
-  { id: 'b5', name: 'Berel Sur', address: 'Av. Garza Sada 4040' },
+  { id: 'b1', nombre_sucursal: 'Corporativo Central', direccion: 'Av. Industrial 100' },
+  { id: 'b2', nombre_sucursal: 'Planta Principal', direccion: 'Carretera Nacional Km 5' },
+  { id: 'b3', nombre_sucursal: 'Sucursal Norte', direccion: 'Av. Universidad 500' },
+  { id: 'b4', nombre_sucursal: 'Berel Centro', direccion: 'Calle Morelos 230' },
+  { id: 'b5', nombre_sucursal: 'Berel Sur', direccion: 'Av. Garza Sada 4040' },
 ];
 
 export const MOCK_TASKS: Task[] = [
