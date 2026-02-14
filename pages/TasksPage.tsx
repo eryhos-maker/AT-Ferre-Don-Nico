@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, User, TaskStatus, Priority, Role } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
@@ -10,13 +10,13 @@ interface TasksPageProps {
   onCreateTask: (task: Partial<Task>) => void;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
-  onSaveEvidence: (taskId: string, evidenceUrl: string) => void;
+  onSaveEvidence: (taskId: string, file: File) => void;
 }
 
 const EvidenceModal: React.FC<{ 
   isOpen: boolean; 
   onClose: () => void; 
-  onSave: (url: string) => void; 
+  onSave: (file: File) => void; 
   taskTitle: string 
 }> = ({ isOpen, onClose, onSave, taskTitle }) => {
   const [isUploading, setIsUploading] = useState(false);
@@ -49,14 +49,15 @@ const EvidenceModal: React.FC<{
     }
 
     setIsUploading(true);
-    // Simular subida
+    // Directly save the file through the prop callback (logic moved to App.tsx)
+    onSave(file);
+    // Note: We close immediately or handle loading state if parent supports it, 
+    // for now we set simulate uploading locally then close.
+    // In a real app, 'onSave' should probably return a Promise.
     setTimeout(() => {
-      setIsUploading(false);
-      // Simular URL generada
-      const dummyUrl = "https://example.com/evidencia-" + Math.floor(Math.random() * 1000) + "-" + file.name;
-      onSave(dummyUrl);
-      onClose();
-    }, 1500);
+        setIsUploading(false);
+        onClose();
+    }, 1000);
   };
 
   return (
@@ -174,6 +175,9 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
   // Only Gerente or specific ADMIN payroll/role users can delete
   const canDeleteTask = currentUser.role === Role.GERENTE || currentUser.role === Role.JEFE_ADMIN || currentUser.payrollId === 'ADMIN';
 
+  // Branch restriction for filter UI
+  const isBranchRestricted = [Role.ENCARGADO_BEREL, Role.SUPERVISOR_COM].includes(currentUser.role);
+
   const availableBranches = Array.from(new Set(users.map(u => u.branch).filter(Boolean))) as string[];
 
   const getPriorityColor = (priority: Priority) => {
@@ -214,10 +218,10 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                           task.folio?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
-    const matchesBranch = filterBranch === 'all' || task.assignedTo.some(uid => {
-        const user = users.find(u => u.id === uid);
-        return user?.branch === filterBranch;
-    });
+    
+    // If restricted, filterBranch is ignored (handled by parent props), or forced to user branch.
+    // If not restricted, use the dropdown value.
+    const matchesBranch = isBranchRestricted ? true : (filterBranch === 'all' || task.branch === filterBranch);
 
     return matchesSearch && matchesStatus && matchesBranch;
   });
@@ -305,19 +309,27 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
              />
            </div>
            
+           {/* Branch Filter - Disabled for restricted users */}
            <div className="relative min-w-[200px]">
              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={18} />
              <select 
-               className="w-full pl-10 pr-8 py-2 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-600 outline-none appearance-none bg-gray-50 text-gray-900 font-bold cursor-pointer hover:bg-gray-100 transition-colors"
-               value={filterBranch}
+               disabled={isBranchRestricted}
+               className={`w-full pl-10 pr-8 py-2 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-600 outline-none appearance-none font-bold transition-colors ${isBranchRestricted ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-50 text-gray-900 cursor-pointer hover:bg-gray-100'}`}
+               value={isBranchRestricted ? currentUser.branch : filterBranch}
                onChange={(e) => setFilterBranch(e.target.value)}
              >
-               <option value="all">Todas las Sucursales</option>
-               {availableBranches.map(branch => (
-                 <option key={branch} value={branch}>{branch}</option>
-               ))}
+               {isBranchRestricted ? (
+                 <option value={currentUser.branch}>{currentUser.branch || 'Mi Sucursal'}</option>
+               ) : (
+                 <>
+                    <option value="all">Todas las Sucursales</option>
+                    {availableBranches.map(branch => (
+                        <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                 </>
+               )}
              </select>
-             <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 pointer-events-none" size={14} />
+             {!isBranchRestricted && <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 pointer-events-none" size={14} />}
            </div>
         </div>
 
@@ -422,7 +434,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-blue-800 hover:text-blue-900 hover:underline text-xs bg-blue-100/50 px-2 py-1 rounded border border-blue-200/50 font-bold transition-colors ml-auto md:ml-0"
                     >
-                      <Download size={12} /> Descargar Evidencia
+                      <Eye size={12} /> Ver / Descargar
                     </a>
                   )}
                 </div>
@@ -493,8 +505,8 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
             setEvidenceTask(null);
             // Si el usuario cierra sin guardar, el estado no cambia (ya que el cambio de estado se detuvo en handleStatusChangeAttempt)
           }}
-          onSave={(url) => {
-             onSaveEvidence(evidenceTask.id, url);
+          onSave={(file) => {
+             onSaveEvidence(evidenceTask.id, file);
              setEvidenceTask(null);
           }}
         />

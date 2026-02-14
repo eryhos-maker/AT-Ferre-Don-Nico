@@ -57,6 +57,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   createdAt: string;
+  branch?: string; // Sucursal asociada a la tarea (para reportes y filtros)
   aiSuggestion?: string;
   
   // New fields

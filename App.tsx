@@ -22,6 +22,7 @@ import {
   deleteBranch as apiDeleteBranch,
   updateTaskStatus as apiUpdateStatus,
   updateTaskEvidence as apiUpdateEvidence,
+  uploadEvidenceFile,
   deleteTask as apiDeleteTask
 } from './services/supabaseService';
 
@@ -62,6 +63,25 @@ const App: React.FC = () => {
   const FULL_ACCESS_ROLES = [Role.GERENTE, Role.JEFE_ADMIN, Role.SUPERVISOR_OPS];
   const hasManagementAccess = currentUser && FULL_ACCESS_ROLES.includes(currentUser.role);
   const isGerente = currentUser?.role === Role.GERENTE;
+
+  // VISIBILITY FILTER:
+  // Encargados Berel and Supervisor Comercial only see tasks from their own branch
+  const getVisibleTasks = () => {
+    if (!currentUser) return [];
+
+    const RESTRICTED_ROLES = [Role.ENCARGADO_BEREL, Role.SUPERVISOR_COM];
+    
+    if (RESTRICTED_ROLES.includes(currentUser.role)) {
+       // Filter by branch match
+       // Note: If user has no branch set, they might see nothing or only tasks with no branch.
+       return tasks.filter(t => t.branch === currentUser.branch);
+    }
+
+    // Gerentes, Admins, etc. see all tasks
+    return tasks;
+  };
+
+  const visibleTasks = getVisibleTasks();
 
   // Check for overdue tasks notifications
   useEffect(() => {
@@ -129,6 +149,16 @@ const App: React.FC = () => {
   };
 
   const handleCreateTask = async (newTask: Partial<Task>) => {
+    // Determine Branch based on Assignee
+    // We look up the first assigned user to get their branch
+    let taskBranch = '';
+    if (newTask.assignedTo && newTask.assignedTo.length > 0) {
+       const assignee = users.find(u => u.id === newTask.assignedTo![0]);
+       if (assignee && assignee.branch) {
+          taskBranch = assignee.branch;
+       }
+    }
+
     // Basic Task Structure
     const baseTask: Partial<Task> = {
       title: newTask.title || '',
@@ -136,7 +166,8 @@ const App: React.FC = () => {
       dueDate: newTask.dueDate,
       status: TaskStatus.PENDING,
       attachmentUrl: newTask.attachmentUrl,
-      evidenceUrl: '' // Empty initially
+      evidenceUrl: '', // Empty initially
+      branch: taskBranch // Save branch!
     };
 
     const createdTasks: Task[] = [];
@@ -199,14 +230,30 @@ const App: React.FC = () => {
     await apiDeleteTask(taskId);
   };
 
-  const handleSaveEvidence = async (taskId: string, evidenceUrl: string) => {
-    // Optimistic Update
-    setTasks(tasks.map(t => t.id === taskId ? { 
-      ...t, 
-      evidenceUrl, 
-      status: TaskStatus.COMPLETED 
-    } : t));
-    await apiUpdateEvidence(taskId, evidenceUrl);
+  const handleSaveEvidence = async (taskId: string, file: File) => {
+    try {
+      // 1. Upload to Supabase Storage
+      const publicUrl = await uploadEvidenceFile(file);
+      
+      if (!publicUrl) {
+        alert("Error al subir la evidencia. Por favor intenta nuevamente.");
+        return;
+      }
+
+      // 2. Update Database with URL
+      await apiUpdateEvidence(taskId, publicUrl);
+
+      // 3. Update Local State
+      setTasks(tasks.map(t => t.id === taskId ? { 
+        ...t, 
+        evidenceUrl: publicUrl, 
+        status: TaskStatus.COMPLETED 
+      } : t));
+
+    } catch (error) {
+      console.error("Error saving evidence:", error);
+      alert("Ocurrió un error inesperado al guardar la evidencia.");
+    }
   };
 
   // --- User Management ---
@@ -290,7 +337,7 @@ const App: React.FC = () => {
               path="/tasks" 
               element={
                 <TasksPage 
-                  tasks={tasks} 
+                  tasks={visibleTasks} 
                   users={users} 
                   currentUser={currentUser} 
                   onCreateTask={handleCreateTask}

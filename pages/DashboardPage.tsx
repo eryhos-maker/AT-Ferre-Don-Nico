@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Task, User, TaskStatus, Priority } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { AlertCircle, CheckCircle2, Clock, PlayCircle, Sparkles, FileText, Download, Paperclip } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, PlayCircle, Sparkles, FileText, Download, Paperclip, Eye } from 'lucide-react';
 import { generateExecutiveSummary } from '../services/geminiService';
 
 interface DashboardPageProps {
@@ -190,16 +190,29 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ tasks, currentUser }) => 
                     </td>
                     <td className="px-6 py-4 text-right">
                        {task.evidenceUrl ? (
-                         <a 
-                           href={task.evidenceUrl} 
-                           target="_blank" 
-                           rel="noreferrer"
-                           className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1.5 rounded-lg border border-green-300 hover:bg-green-200 transition-colors text-xs font-bold"
-                         >
-                           <FileText size={14} />
-                           Ver Evidencia
-                           <Download size={14} />
-                         </a>
+                         <div className="flex items-center justify-end gap-2">
+                           <a 
+                             href={task.evidenceUrl} 
+                             target="_blank" 
+                             rel="noreferrer"
+                             className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-lg border border-green-200 hover:bg-green-100 transition-colors text-xs font-bold"
+                             title="Ver Evidencia"
+                           >
+                             <Eye size={14} />
+                             Ver
+                           </a>
+                           <a 
+                             href={task.evidenceUrl} 
+                             download={`Evidencia_${task.folio}`}
+                             target="_blank"
+                             rel="noreferrer"
+                             className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors text-xs font-bold"
+                             title="Descargar Evidencia"
+                           >
+                             <Download size={14} />
+                             Descargar
+                           </a>
+                         </div>
                        ) : (
                          <span className="text-xs text-gray-400 italic font-medium">Sin evidencia digital</span>
                        )}

@@ -41,7 +41,7 @@ export const fetchUsers = async (): Promise<User[]> => {
     email: emp.correo,
     password: emp.contrasena,
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.nombre)}&background=0D8ABC&color=fff`,
-    branch: '' // Logic for branch relationship not in 'empleados' table definition provided, could be added if needed
+    branch: emp.sucursal || '' // Map 'sucursal' column to 'branch' property
   }));
 };
 
@@ -51,7 +51,8 @@ export const createUser = async (user: User): Promise<User | null> => {
     nombre: user.name,
     contrasena: user.password || '123456',
     rol: user.role,
-    correo: user.email
+    correo: user.email,
+    sucursal: user.branch // Save branch to DB
   }).select().single();
 
   if (error) {
@@ -73,7 +74,8 @@ export const updateUser = async (user: User): Promise<User | null> => {
       nombre: user.name,
       contrasena: user.password, // Be careful updating passwords in plain text in production
       rol: user.role,
-      correo: user.email
+      correo: user.email,
+      sucursal: user.branch // Update branch in DB
     })
     .eq('id', user.id)
     .select()
@@ -111,7 +113,8 @@ export const ensureAdminUser = async () => {
       nombre: 'Administrador Sistema',
       contrasena: 'Donnico1',
       rol: 'Gerente', // Role.GERENTE
-      correo: 'admin@ferredonnico.com'
+      correo: 'admin@ferredonnico.com',
+      sucursal: 'Corporativo'
     });
     
     if (error) {
@@ -200,6 +203,7 @@ export const fetchTasks = async (): Promise<Task[]> => {
     status: mapStatusFromDB(t.status),
     priority: Priority.MEDIUM, // Default, not in DB
     createdAt: t.created_at,
+    branch: t.sucursal || '', // Map DB 'sucursal' to Task.branch
     evidenceUrl: t.evidencia_anexa_url,
     attachmentUrl: t.archivo_anexo_url,
     attachmentName: t.archivo_anexo_url ? 'Archivo Adjunto' : undefined,
@@ -224,7 +228,8 @@ export const createTask = async (task: Partial<Task>): Promise<Task | null> => {
     fecha_hora_vencimiento: task.dueDate,
     status: mapStatusToDB(task.status || TaskStatus.PENDING),
     archivo_anexo_url: task.attachmentUrl,
-    evidencia_anexa_url: task.evidenceUrl
+    evidencia_anexa_url: task.evidenceUrl,
+    sucursal: task.branch // Save the branch to DB
   }).select().single();
 
   if (error) {
@@ -248,6 +253,30 @@ export const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
     .eq('id', taskId);
   
   if (error) console.error("Error updating status:", error);
+};
+
+export const uploadEvidenceFile = async (file: File): Promise<string | null> => {
+  // 1. Create a unique file name
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const filePath = `${fileName}`;
+
+  // 2. Upload to 'evidence' bucket
+  const { error: uploadError } = await supabase.storage
+    .from('evidence')
+    .upload(filePath, file);
+
+  if (uploadError) {
+    console.error('Error uploading evidence:', uploadError);
+    return null;
+  }
+
+  // 3. Get Public URL
+  const { data } = supabase.storage
+    .from('evidence')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
 };
 
 export const updateTaskEvidence = async (taskId: string, url: string) => {
