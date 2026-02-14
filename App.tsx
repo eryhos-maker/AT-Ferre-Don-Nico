@@ -25,7 +25,6 @@ import {
   uploadEvidenceFile,
   deleteTask as apiDeleteTask
 } from './services/supabaseService';
-import { checkGoogleInit } from './services/googleDriveService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -40,9 +39,6 @@ const App: React.FC = () => {
     const loadData = async () => {
       setIsLoading(true);
       
-      // Initialize Google Drive API in background
-      checkGoogleInit().catch(console.error);
-
       try {
         const [usersData, branchesData, tasksData] = await Promise.all([
           fetchUsers(),

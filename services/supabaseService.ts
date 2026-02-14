@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
 import { User, Task, Branch, Role, TaskStatus, Priority } from '../types';
-import { uploadFileToDrive } from './googleDriveService';
 
 // --- MAPPERS ---
 
@@ -186,16 +185,7 @@ export const deleteBranch = async (id: string): Promise<boolean> => {
 // --- TASKS ---
 
 export const fetchTasks = async (): Promise<Task[]> => {
-  // JOIN: We fetch all columns from tasks (*), plus the name from the referenced table 'sucursales'.
-  // Assumes 'sucursal' in tasks table is a Foreign Key to 'sucursales.id'
-  const { data, error } = await supabase
-    .from('tasks')
-    .select(`
-      *,
-      sucursales (
-        nombre
-      )
-    `);
+  const { data, error } = await supabase.from('tasks').select('*');
   
   if (error) {
     console.error('Error fetching tasks:', error);
@@ -213,9 +203,7 @@ export const fetchTasks = async (): Promise<Task[]> => {
     status: mapStatusFromDB(t.status),
     priority: Priority.MEDIUM,
     createdAt: t.created_at,
-    // Extract the name from the joined object. 
-    // If null/undefined, fallback to empty string.
-    branch: t.sucursales?.nombre || 'General', 
+    branch: t.sucursal || 'General', 
     evidenceUrl: t.evidencia_anexa_url,
     attachmentUrl: t.archivo_anexo_url,
     attachmentName: t.archivo_anexo_url ? 'Archivo Adjunto' : undefined,
@@ -231,11 +219,6 @@ export const createTask = async (task: Partial<Task>): Promise<Task | null> => {
     console.error("Cannot create task without assignment");
     return null;
   }
-
-  // NOTE: Assuming task.branch contains the ID of the branch when creating a task.
-  // If the UI passes the Name, this might fail if the DB expects UUID.
-  // For this implementation, we assume the dropdown provides the ID or the backend handles text.
-  // Ideally, 'task.branch' should be the Branch UUID.
 
   const { data, error } = await supabase.from('tasks').insert({
     folio: task.folio,
@@ -272,15 +255,25 @@ export const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
 };
 
 export const uploadEvidenceFile = async (file: File): Promise<string | null> => {
-  console.log("Iniciando carga a Google Drive...");
   try {
-     // Use the new Google Drive Service
-     const webViewLink = await uploadFileToDrive(file);
-     return webViewLink;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('evidence')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage.from('evidence').getPublicUrl(filePath);
+    return data.publicUrl;
   } catch (error) {
-     console.error("Error uploading to Google Drive:", error);
-     alert("No se pudo conectar con Google Drive. Por favor revisa la consola o verifica las credenciales.");
-     return null;
+    console.error('Error uploading file to Supabase Storage:', error);
+    return null;
   }
 };
 
