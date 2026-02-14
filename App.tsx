@@ -25,6 +25,7 @@ import {
   uploadEvidenceFile,
   deleteTask as apiDeleteTask
 } from './services/supabaseService';
+import { checkGoogleInit } from './services/googleDriveService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -38,6 +39,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
+      
+      // Initialize Google Drive API in background
+      checkGoogleInit().catch(console.error);
+
       try {
         const [usersData, branchesData, tasksData] = await Promise.all([
           fetchUsers(),
@@ -152,10 +157,18 @@ const App: React.FC = () => {
     // Determine Branch based on Assignee
     // We look up the first assigned user to get their branch
     let taskBranch = '';
+    
+    // Find Branch ID if we have branches loaded
+    // This logic ensures we save the ID if branches are objects, or string if simple text.
+    // However, fetchTasks now joins tables, so we should try to save the ID.
     if (newTask.assignedTo && newTask.assignedTo.length > 0) {
        const assignee = users.find(u => u.id === newTask.assignedTo![0]);
        if (assignee && assignee.branch) {
-          taskBranch = assignee.branch;
+          // If the 'branch' on user is just a name, we might need to find the ID.
+          // Since the user list 'branch' comes from 'sucursal' column which might be an ID or name depending on DB state.
+          // Assuming user.branch currently holds the Name (based on fetchUsers mapping), we need to find the ID from 'branches'.
+          const foundBranch = branches.find(b => b.name === assignee.branch);
+          taskBranch = foundBranch ? foundBranch.id : assignee.branch; 
        }
     }
 
@@ -167,7 +180,7 @@ const App: React.FC = () => {
       status: TaskStatus.PENDING,
       attachmentUrl: newTask.attachmentUrl,
       evidenceUrl: '', // Empty initially
-      branch: taskBranch // Save branch!
+      branch: taskBranch // Save branch ID!
     };
 
     const createdTasks: Task[] = [];
@@ -232,11 +245,11 @@ const App: React.FC = () => {
 
   const handleSaveEvidence = async (taskId: string, file: File) => {
     try {
-      // 1. Upload to Supabase Storage
+      // 1. Upload to Google Drive (Triggers Popup if needed)
       const publicUrl = await uploadEvidenceFile(file);
       
       if (!publicUrl) {
-        alert("Error al subir la evidencia. Por favor intenta nuevamente.");
+        // uploadEvidenceFile alerts on error already
         return;
       }
 
