@@ -9,7 +9,7 @@ const mapStatusFromDB = (status: string): TaskStatus => {
     case 'pendiente': return TaskStatus.PENDING;
     case 'en_progreso': return TaskStatus.IN_PROGRESS;
     case 'completada': return TaskStatus.COMPLETED;
-    case 'cancelada': return TaskStatus.COMPLETED; // Map cancelled to completed or handle differently
+    case 'cancelada': return TaskStatus.COMPLETED; 
     default: return TaskStatus.PENDING;
   }
 };
@@ -37,22 +37,22 @@ export const fetchUsers = async (): Promise<User[]> => {
     id: emp.id,
     payrollId: emp.nomina,
     name: emp.nombre,
-    role: emp.rol as Role, // Assuming DB text matches Enum values, otherwise need mapper
+    role: emp.rol as Role, 
     email: emp.correo,
     password: emp.contrasena,
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.nombre)}&background=0D8ABC&color=fff`,
-    branch: emp.sucursal || '' // Map 'sucursal' column to 'branch' property
+    branch: 'General' // DB schema 'empleados' does not have 'sucursal' column
   }));
 };
 
 export const createUser = async (user: User): Promise<User | null> => {
+  // DB schema 'empleados' does not have 'sucursal' column, so we exclude it.
   const { data, error } = await supabase.from('empleados').insert({
     nomina: user.payrollId,
     nombre: user.name,
     contrasena: user.password || '123456',
     rol: user.role,
-    correo: user.email,
-    sucursal: user.branch // Save branch to DB
+    correo: user.email
   }).select().single();
 
   if (error) {
@@ -62,7 +62,8 @@ export const createUser = async (user: User): Promise<User | null> => {
 
   return {
     ...user,
-    id: data.id
+    id: data.id,
+    branch: 'General'
   };
 };
 
@@ -72,10 +73,9 @@ export const updateUser = async (user: User): Promise<User | null> => {
     .update({
       nomina: user.payrollId,
       nombre: user.name,
-      contrasena: user.password, // Be careful updating passwords in plain text in production
+      contrasena: user.password,
       rol: user.role,
-      correo: user.email,
-      sucursal: user.branch // Update branch in DB
+      correo: user.email
     })
     .eq('id', user.id)
     .select()
@@ -88,7 +88,8 @@ export const updateUser = async (user: User): Promise<User | null> => {
   
   return {
     ...user,
-    id: data.id
+    id: data.id,
+    branch: 'General'
   };
 };
 
@@ -103,7 +104,6 @@ export const deleteUser = async (id: string): Promise<boolean> => {
 
 // Helper for Dev: Ensure Admin exists
 export const ensureAdminUser = async () => {
-  // Check if admin already exists
   const { data } = await supabase.from('empleados').select('id').eq('nomina', 'ADMIN').single();
   
   if (!data) {
@@ -112,18 +112,17 @@ export const ensureAdminUser = async () => {
       nomina: 'ADMIN',
       nombre: 'Administrador Sistema',
       contrasena: 'Donnico1',
-      rol: 'Gerente', // Role.GERENTE
-      correo: 'admin@ferredonnico.com',
-      sucursal: 'Corporativo'
+      rol: 'Gerente', 
+      correo: 'admin@ferredonnico.com'
     });
     
     if (error) {
       console.error("Error creating admin:", error);
       throw error;
     }
-    return true; // Created
+    return true; 
   }
-  return false; // Already existed
+  return false; 
 };
 
 // --- BRANCHES (SUCURSALES) ---
@@ -196,14 +195,14 @@ export const fetchTasks = async (): Promise<Task[]> => {
     id: t.id,
     folio: t.folio,
     title: t.tarea,
-    description: t.tarea, // Mapping 'tarea' to description 
+    description: t.tarea, 
     assignedTo: t.asignacion ? [t.asignacion] : [],
     createdBy: '',
     dueDate: t.fecha_hora_vencimiento,
     status: mapStatusFromDB(t.status),
-    priority: Priority.MEDIUM,
+    priority: Priority.MEDIUM, 
     createdAt: t.created_at,
-    branch: t.sucursal || 'General', 
+    branch: 'General', 
     evidenceUrl: t.evidencia_anexa_url,
     attachmentUrl: t.archivo_anexo_url,
     attachmentName: t.archivo_anexo_url ? 'Archivo Adjunto' : undefined,
@@ -220,15 +219,18 @@ export const createTask = async (task: Partial<Task>): Promise<Task | null> => {
     return null;
   }
 
+  const combinedTitle = task.description && task.description !== task.title 
+    ? `${task.title} - ${task.description}` 
+    : task.title;
+
   const { data, error } = await supabase.from('tasks').insert({
     folio: task.folio,
-    tarea: task.title,
+    tarea: combinedTitle,
     asignacion: assigneeId,
     fecha_hora_vencimiento: task.dueDate,
     status: mapStatusToDB(task.status || TaskStatus.PENDING),
     archivo_anexo_url: task.attachmentUrl,
-    evidencia_anexa_url: task.evidenceUrl,
-    sucursal: task.branch // ID or FK
+    evidencia_anexa_url: task.evidenceUrl
   }).select().single();
 
   if (error) {
@@ -240,7 +242,9 @@ export const createTask = async (task: Partial<Task>): Promise<Task | null> => {
     ...task,
     id: data.id,
     createdAt: data.created_at,
-    status: mapStatusFromDB(data.status)
+    status: mapStatusFromDB(data.status),
+    title: data.tarea,
+    description: data.tarea
   } as Task;
 };
 
@@ -254,27 +258,54 @@ export const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
   if (error) console.error("Error updating status:", error);
 };
 
-export const uploadEvidenceFile = async (file: File): Promise<string | null> => {
+// Generic Upload Function for 'files' bucket
+export const uploadFile = async (file: File, folder: 'evidence' | 'attachments'): Promise<string | null> => {
   try {
+    // 1. Sanitize file name
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `${fileName}`;
+    const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
+    const cleanName = nameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // Unique path: folder/timestamp_name.ext
+    const fileName = `${folder}/${Date.now()}_${cleanName}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('evidence')
-      .upload(filePath, file);
+    console.log(`Subiendo: ${fileName}`);
+
+    // 2. Upload with explicit options
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('files')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
 
     if (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw uploadError;
+      console.error("❌ Error CRÍTICO al subir archivo:", uploadError);
+      
+      // Mensaje amigable si es error de políticas
+      if (uploadError.message.includes("row-level security policy")) {
+         alert("⛔ ERROR DE PERMISOS SUPABASE\n\nTu usuario no tiene permiso para subir archivos.\n\nSOLUCIÓN: Ejecuta el script SQL para permitir inserts al rol 'public' (ya que tu login es personalizado).");
+      } else {
+         alert(`Error al subir: ${uploadError.message}`);
+      }
+      return null;
     }
 
-    const { data } = supabase.storage.from('evidence').getPublicUrl(filePath);
+    console.log("✅ Subida exitosa", uploadData);
+
+    // 3. Get Public URL
+    const { data } = supabase.storage.from('files').getPublicUrl(fileName);
     return data.publicUrl;
+
   } catch (error) {
-    console.error('Error uploading file to Supabase Storage:', error);
+    console.error('Error general en uploadFile:', error);
     return null;
   }
+};
+
+// Wrapper for backward compatibility if needed, or specific use cases
+export const uploadEvidenceFile = async (file: File): Promise<string | null> => {
+  return uploadFile(file, 'evidence');
 };
 
 export const updateTaskEvidence = async (taskId: string, url: string) => {

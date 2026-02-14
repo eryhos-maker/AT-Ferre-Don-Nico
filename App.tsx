@@ -22,7 +22,7 @@ import {
   deleteBranch as apiDeleteBranch,
   updateTaskStatus as apiUpdateStatus,
   updateTaskEvidence as apiUpdateEvidence,
-  uploadEvidenceFile,
+  uploadFile,
   deleteTask as apiDeleteTask
 } from './services/supabaseService';
 
@@ -149,20 +149,29 @@ const App: React.FC = () => {
      return `OP-${dateStr}-${randomPart}`;
   };
 
-  const handleCreateTask = async (newTask: Partial<Task>) => {
+  const handleCreateTask = async (newTask: Partial<Task>, attachmentFile?: File) => {
+    let attachmentUrl = undefined;
+
+    // 1. Upload Attachment if present
+    if (attachmentFile) {
+       const url = await uploadFile(attachmentFile, 'attachments');
+       if (url) {
+          attachmentUrl = url;
+       } else {
+         // Si falla la subida (por error de politica o red), cancelamos la creación
+         console.warn("Upload failed, cancelling task creation");
+         return; 
+       }
+    }
+
     // Determine Branch based on Assignee
     // We look up the first assigned user to get their branch
     let taskBranch = '';
     
     // Find Branch ID if we have branches loaded
-    // This logic ensures we save the ID if branches are objects, or string if simple text.
-    // However, fetchTasks now joins tables, so we should try to save the ID.
     if (newTask.assignedTo && newTask.assignedTo.length > 0) {
        const assignee = users.find(u => u.id === newTask.assignedTo![0]);
        if (assignee && assignee.branch) {
-          // If the 'branch' on user is just a name, we might need to find the ID.
-          // Since the user list 'branch' comes from 'sucursal' column which might be an ID or name depending on DB state.
-          // Assuming user.branch currently holds the Name (based on fetchUsers mapping), we need to find the ID from 'branches'.
           const foundBranch = branches.find(b => b.name === assignee.branch);
           taskBranch = foundBranch ? foundBranch.id : assignee.branch; 
        }
@@ -174,7 +183,7 @@ const App: React.FC = () => {
       assignedTo: newTask.assignedTo || [],
       dueDate: newTask.dueDate,
       status: TaskStatus.PENDING,
-      attachmentUrl: newTask.attachmentUrl,
+      attachmentUrl: attachmentUrl || newTask.attachmentUrl,
       evidenceUrl: '', // Empty initially
       branch: taskBranch // Save branch ID!
     };
@@ -241,11 +250,11 @@ const App: React.FC = () => {
 
   const handleSaveEvidence = async (taskId: string, file: File) => {
     try {
-      // 1. Upload to Google Drive (Triggers Popup if needed)
-      const publicUrl = await uploadEvidenceFile(file);
+      // 1. Upload to Supabase Storage (Using the generic uploadFile with 'evidence' folder)
+      const publicUrl = await uploadFile(file, 'evidence');
       
       if (!publicUrl) {
-        // uploadEvidenceFile alerts on error already
+        // Alert already shown by uploadFile
         return;
       }
 
@@ -261,7 +270,7 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Error saving evidence:", error);
-      alert("Ocurrió un error inesperado al guardar la evidencia.");
+      // alert("Ocurrió un error inesperado al guardar la evidencia.");
     }
   };
 
@@ -365,6 +374,7 @@ const App: React.FC = () => {
               element={
                 hasManagementAccess ? 
                 <SettingsPage 
+                  currentUser={currentUser}
                   users={users} 
                   branches={branches}
                   onAddUser={handleAddUser}

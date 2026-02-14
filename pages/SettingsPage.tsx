@@ -3,6 +3,7 @@ import { User, Branch, Role } from '../types';
 import { Plus, Users, Building2, Trash2, Edit2, X, Hash, MapPin, Lock, Save } from 'lucide-react';
 
 interface SettingsPageProps {
+  currentUser: User;
   users: User[];
   branches: Branch[];
   onAddUser: (user: User) => void;
@@ -14,6 +15,7 @@ interface SettingsPageProps {
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ 
+  currentUser,
   users, 
   branches, 
   onAddUser, 
@@ -32,6 +34,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   // Branch Modal State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+
+  // Logic to determine if current user can delete other users
+  const canDeleteUsers = currentUser.role === Role.GERENTE || currentUser.payrollId === 'ADMIN';
 
   const handleOpenUserModal = (user?: User) => {
     if (user) {
@@ -127,13 +132,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             >
                               <Edit2 size={16}/>
                             </button>
-                            <button 
-                              onClick={() => onRemoveUser(u.id)}
-                              className="text-gray-500 hover:text-red-700 p-1 ml-2 transition-colors"
-                              title="Eliminar Usuario"
-                            >
-                              <Trash2 size={16}/>
-                            </button>
+                            {canDeleteUsers && (
+                              <button 
+                                onClick={() => onRemoveUser(u.id)}
+                                className="text-gray-500 hover:text-red-700 p-1 ml-2 transition-colors"
+                                title="Eliminar Usuario"
+                              >
+                                <Trash2 size={16}/>
+                              </button>
+                            )}
                          </td>
                       </tr>
                     ))}

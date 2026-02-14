@@ -28,10 +28,26 @@ const EvidenceModal: React.FC<{
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
       
-      if (!selectedFile.type.startsWith('image/') && selectedFile.type !== 'application/pdf') {
-         setErrorMsg("⚠️ Formato no permitido. Solo se aceptan imágenes y PDF.");
+      // Permitir: Imagenes, PDF y Excel
+      const validMimeTypes = [
+          'application/pdf', 
+          'image/jpeg', 
+          'image/png', 
+          'image/jpg', 
+          'image/webp',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ];
+      
+      const fileExt = selectedFile.name.split('.').pop()?.toLowerCase();
+      const validExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx', 'webp'];
+
+      // Verificación robusta por extensión y tipo si es posible
+      const isValid = validMimeTypes.includes(selectedFile.type) || (fileExt && validExtensions.includes(fileExt));
+
+      if (!isValid) {
+         setErrorMsg("⚠️ Formato no permitido. Solo se aceptan Imágenes, PDF o Excel.");
          setFile(null);
          e.target.value = ''; // Reset input
          return;
@@ -44,7 +60,7 @@ const EvidenceModal: React.FC<{
 
   const handleUploadAndSave = () => {
     if (!file) {
-      setErrorMsg("⚠️ Acción bloqueada: No se ha subido ningún archivo permitido (PDF/Imagen) para completar esta tarea.");
+      setErrorMsg("⚠️ Acción bloqueada: No se ha subido ningún archivo para completar esta tarea.");
       return;
     }
 
@@ -71,7 +87,7 @@ const EvidenceModal: React.FC<{
         <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg flex items-start gap-2 mb-4">
           <AlertTriangle className="text-orange-600 shrink-0 mt-0.5" size={16} />
           <p className="text-sm font-medium text-orange-800">
-            La tarea <strong>"{taskTitle}"</strong> requiere evidencia visual para completarse.
+            La tarea <strong>"{taskTitle}"</strong> requiere evidencia visual o documento para completarse.
           </p>
         </div>
 
@@ -85,7 +101,7 @@ const EvidenceModal: React.FC<{
         <div className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 transition-colors group relative ${errorMsg ? 'border-red-300 bg-red-50' : 'border-gray-400 bg-gray-50 hover:bg-gray-100'}`}>
           <input 
             type="file" 
-            accept="image/*,application/pdf"
+            accept=".pdf, .xls, .xlsx, .jpg, .jpeg, .png, .webp"
             onChange={handleFileChange}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
           />
@@ -97,7 +113,7 @@ const EvidenceModal: React.FC<{
                 {file ? file.name : "Haga clic para seleccionar archivo"}
              </p>
              <p className="text-xs text-gray-500 font-medium">
-                {file ? `${(file.size / 1024).toFixed(1)} KB` : "PDF, JPG, PNG (Max 5MB)"}
+                {file ? `${(file.size / 1024).toFixed(1)} KB` : "PDF, Excel, JPG, PNG"}
              </p>
           </div>
         </div>
@@ -361,7 +377,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
             const cardStyles = getTaskCardStyles(task.status);
 
             return (
-          <div key={task.id} className={`relative p-5 rounded-xl border border-l-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${cardStyles} group`}>
+          <div key={task.id} className={`relative p-5 rounded-xl border border-l-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:scale-[1.01] ${cardStyles} group`}>
             
             <div className="flex flex-col md:flex-row justify-between gap-4">
               <div className="flex-1">

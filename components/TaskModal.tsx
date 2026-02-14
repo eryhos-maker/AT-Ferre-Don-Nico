@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Loader2, Calendar, FileCheck, Plus, Trash2, ListTodo, Users, Paperclip, FileText } from 'lucide-react';
+import { X, Sparkles, Loader2, Calendar, FileCheck, Plus, Trash2, ListTodo, Users, Paperclip, Clock, Zap, ArrowRight, Sun, Moon, Briefcase } from 'lucide-react';
 import { User, Priority, Task, Subtask } from '../types';
 import { analyzeTask } from '../services/geminiService';
 
@@ -8,7 +8,7 @@ interface TaskModalProps {
   onClose: () => void;
   users: User[];
   currentUser: User;
-  onSave: (task: Partial<Task>) => void;
+  onSave: (task: Partial<Task>, attachmentFile?: File) => void;
 }
 
 const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUser, onSave }) => {
@@ -93,14 +93,49 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Basic validation by extension (backend would validate MIME type)
-      if (file.name.endsWith('.pdf') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
+      // Validation: Allow Images, PDF, Excel
+      // Simple extension check is often more user-friendly than complex MIME types for mixed input
+      const allowedExtensions = ['pdf', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'webp'];
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+
+      if (fileExt && allowedExtensions.includes(fileExt)) {
         setAttachment(file);
       } else {
-        alert("Solo se permiten archivos PDF o Excel.");
+        alert("Formato no soportado. Use: PDF, Excel, o Imágenes (JPG/PNG).");
         e.target.value = ''; // Reset input
       }
     }
+  };
+
+  // Helper to set quick dates formatted for datetime-local input
+  const setQuickDate = (type: 'today_end' | 'tomorrow_morning' | 'tomorrow_end' | 'next_monday') => {
+    const now = new Date();
+    const target = new Date(now);
+
+    switch (type) {
+        case 'today_end':
+            target.setHours(18, 0, 0, 0);
+            break;
+        case 'tomorrow_morning':
+            target.setDate(now.getDate() + 1);
+            target.setHours(9, 0, 0, 0);
+            break;
+        case 'tomorrow_end':
+            target.setDate(now.getDate() + 1);
+            target.setHours(18, 0, 0, 0);
+            break;
+        case 'next_monday':
+            const day = now.getDay();
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1) + 7; // Next Monday
+            target.setDate(diff);
+            target.setHours(9, 0, 0, 0);
+            break;
+    }
+
+    // Adjust for timezone offset to ensure the input shows the correct local time
+    const offset = target.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(target.getTime() - offset)).toISOString().slice(0, 16);
+    setDueDate(localISOTime);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -123,94 +158,240 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
       requiresEvidence,
       subtasks,
       attachmentName: attachment ? attachment.name : undefined,
-      // In a real app, upload file here and get URL. We pass a dummy URL or object URL.
-      attachmentUrl: attachment ? URL.createObjectURL(attachment) : undefined
-    });
+    }, attachment || undefined);
+    
     onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh] border border-gray-300">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-300">
         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-100">
-          <h2 className="text-lg font-black text-gray-900">Nueva Tarea Operativa</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 transition-colors">
+          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+            <Plus className="text-blue-700" size={24} />
+            Nueva Tarea Operativa
+          </h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 transition-colors bg-gray-200 hover:bg-gray-300 rounded-full p-1">
             <X size={20} />
           </button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
-          <form id="task-form" onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-800 mb-1">Título de la Tarea</label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 outline-none bg-gray-50 text-gray-900 transition-colors placeholder-gray-400"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ej. Inventario de Pinturas"
-              />
+          <form id="task-form" onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Title & Description Group */}
+            <div className="space-y-4">
+                <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Título de la Tarea</label>
+                <input
+                    type="text"
+                    required
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-600 outline-none bg-gray-50 text-gray-900 transition-colors placeholder-gray-400 font-bold text-lg"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Ej. Inventario de Pinturas"
+                />
+                </div>
+
+                <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Descripción</label>
+                <textarea
+                    required
+                    rows={2}
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 outline-none bg-gray-50 text-gray-900 transition-colors placeholder-gray-400 resize-none"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Detalles de la operación..."
+                />
+                </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-gray-800 mb-1">Descripción</label>
-              <textarea
-                required
-                rows={3}
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 outline-none bg-gray-50 text-gray-900 transition-colors placeholder-gray-400"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Detalles de la operación..."
-              />
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column: Planning (Date & Priority) */}
+                <div className="space-y-4">
+                    <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <label className="block text-sm font-black text-blue-900 mb-3 flex items-center gap-2">
+                            <Clock size={16} /> Planificación
+                        </label>
+                        
+                        {/* Quick Date Buttons */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                            <button type="button" onClick={() => setQuickDate('today_end')} className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
+                                <ArrowRight size={12} /> Hoy 6 PM
+                            </button>
+                            <button type="button" onClick={() => setQuickDate('tomorrow_morning')} className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
+                                <Sun size={12} /> Mañana 9 AM
+                            </button>
+                            <button type="button" onClick={() => setQuickDate('tomorrow_end')} className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
+                                <Moon size={12} /> Mañana 6 PM
+                            </button>
+                            <button type="button" onClick={() => setQuickDate('next_monday')} className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
+                                <Briefcase size={12} /> Prox. Lunes
+                            </button>
+                        </div>
 
-             {/* Attachment Section */}
-             <div className="bg-gray-50 p-3 rounded-lg border-2 border-gray-200">
-               <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-800">
-                  <Paperclip size={16} />
-                  <span>Adjuntar Archivo (Opcional)</span>
-               </div>
-               <div className="relative">
-                  <input
-                    type="file"
-                    accept=".pdf, .xls, .xlsx"
-                    onChange={handleFileChange}
-                    className="block w-full text-sm text-gray-600
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-full file:border-0
-                      file:text-xs file:font-bold
-                      file:bg-blue-100 file:text-blue-800
-                      hover:file:bg-blue-200
-                      file:cursor-pointer
-                    "
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1 ml-1 font-medium">Solo PDF y Excel permitidos.</p>
-               </div>
-             </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-gray-600 mb-1 block">{isRecurring ? 'Fecha Límite' : 'Vencimiento Exacto'}</label>
+                                <div className="relative">
+                                    <input
+                                        type="datetime-local"
+                                        required
+                                        className="w-full pl-9 pr-3 py-2 border-2 border-blue-200 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-bold shadow-sm"
+                                        value={dueDate}
+                                        onChange={(e) => setDueDate(e.target.value)}
+                                    />
+                                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 text-blue-500" size={16} />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="text-xs font-bold text-gray-600 mb-1 block">Nivel de Prioridad</label>
+                                <select
+                                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none font-bold text-sm"
+                                    value={priority}
+                                    onChange={(e) => setPriority(e.target.value as Priority)}
+                                >
+                                    {Object.values(Priority).map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
 
-            {/* AI Assistant Button */}
-            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-bold text-indigo-900 uppercase flex items-center gap-1">
-                  <Sparkles size={14} /> Asistente IA
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAIAnalysis}
-                  disabled={isAnalyzing || !title}
-                  className="text-xs bg-indigo-700 text-white px-3 py-1 rounded-md hover:bg-indigo-800 disabled:opacity-50 transition-colors font-bold"
-                >
-                  {isAnalyzing ? <span className="flex items-center gap-1"><Loader2 className="animate-spin" size={12}/> Analizando...</span> : 'Sugerir Subtareas y Prioridad'}
-                </button>
-              </div>
-              <p className="text-[10px] text-indigo-500 font-medium">La IA generará automáticamente las subtareas.</p>
+                    {/* AI Assistant Button */}
+                    <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-bold text-indigo-900 uppercase flex items-center gap-1">
+                            <Sparkles size={14} /> Asistente IA
+                            </span>
+                            <button
+                            type="button"
+                            onClick={handleAIAnalysis}
+                            disabled={isAnalyzing || !title}
+                            className="text-xs bg-indigo-700 text-white px-3 py-1 rounded-md hover:bg-indigo-800 disabled:opacity-50 transition-colors font-bold"
+                            >
+                            {isAnalyzing ? <span className="flex items-center gap-1"><Loader2 className="animate-spin" size={12}/> Analizando...</span> : 'Sugerir Subtareas'}
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-indigo-500 font-medium">La IA definirá prioridad y pasos automáticamente.</p>
+                    </div>
+                </div>
+
+                {/* Right Column: Assignment & Details */}
+                <div className="space-y-4">
+                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
+                        <label className="block text-sm font-black text-gray-800 flex items-center gap-2">
+                            <Users size={16} /> Asignación
+                        </label>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs text-gray-600 mb-1 font-bold">Responsable Principal *</label>
+                                <select
+                                    required
+                                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-medium"
+                                    value={primaryAssignee}
+                                    onChange={(e) => setPrimaryAssignee(e.target.value)}
+                                >
+                                    <option value="">Seleccionar...</option>
+                                    {users.map(u => (
+                                    <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-600 mb-1 font-bold">Apoyo / Secundario</label>
+                                <select
+                                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-medium"
+                                    value={secondaryAssignee}
+                                    onChange={(e) => setSecondaryAssignee(e.target.value)}
+                                >
+                                    <option value="">Ninguno</option>
+                                    {users.filter(u => u.id !== primaryAssignee).map(u => (
+                                    <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Attachment Section */}
+                    <div className="bg-gray-50 p-3 rounded-lg border-2 border-gray-200">
+                        <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-800">
+                            <Paperclip size={16} />
+                            <span>Adjuntar Soporte (Opcional)</span>
+                        </div>
+                        <div className="relative">
+                            <input
+                                type="file"
+                                accept=".pdf, .xls, .xlsx, .jpg, .jpeg, .png"
+                                onChange={handleFileChange}
+                                className="block w-full text-sm text-gray-600
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-full file:border-0
+                                file:text-xs file:font-bold
+                                file:bg-blue-100 file:text-blue-800
+                                hover:file:bg-blue-200
+                                file:cursor-pointer
+                                "
+                            />
+                            <p className="text-[10px] text-gray-500 mt-1 ml-1 font-medium">PDF, Excel o Imágenes.</p>
+                        </div>
+                    </div>
+
+                    {/* Advanced Options Toggles */}
+                    <div className="space-y-2">
+                        {/* Evidence Toggle */}
+                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                                <FileCheck size={14} className="text-gray-500" />
+                                <span>Solicitar Evidencia</span>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" className="sr-only peer" checked={requiresEvidence} onChange={e => setRequiresEvidence(e.target.checked)} />
+                                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+                            </label>
+                        </div>
+
+                         {/* Recurring Toggle */}
+                         <div className="p-2 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                                    <Calendar size={14} className="text-gray-500" />
+                                    <span>Tarea Repetitiva</span>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" className="sr-only peer" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} />
+                                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-700"></div>
+                                </label>
+                            </div>
+                            
+                            {isRecurring && (
+                                <div className="mt-2 pt-2 border-t border-gray-200">
+                                    <div className="flex gap-1 justify-between">
+                                    {DAYS.map((day) => (
+                                        <button
+                                        key={day.value}
+                                        type="button"
+                                        onClick={() => toggleDay(day.value)}
+                                        className={`w-6 h-6 rounded-full text-[10px] font-bold transition-colors ${selectedDays.includes(day.value) ? 'bg-blue-700 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
+                                        >
+                                        {day.label}
+                                        </button>
+                                    ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
 
              {/* Subtasks Section */}
-             <div className="space-y-2">
+             <div className="space-y-2 pt-2 border-t border-gray-200">
                <label className="block text-sm font-bold text-gray-800 mb-1 flex items-center gap-2">
-                 <ListTodo size={16} /> Subtareas
+                 <ListTodo size={16} /> Subtareas / Lista de Pasos
                </label>
                
                <div className="flex gap-2 mb-2">
@@ -232,7 +413,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
                </div>
 
                {subtasks.length > 0 && (
-                 <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-200">
+                 <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-200 max-h-32 overflow-y-auto">
                    {subtasks.map((st) => (
                      <div key={st.id} className="p-2 flex justify-between items-center group">
                        <span className="text-sm text-gray-800 pl-1 font-medium">{st.title}</span>
@@ -249,117 +430,6 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
                )}
             </div>
 
-            <div className="bg-gray-50 p-3 rounded-lg border-2 border-gray-200 space-y-3">
-              <label className="block text-sm font-bold text-gray-800 flex items-center gap-2">
-                <Users size={16} /> Asignación de Personal
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1 font-bold">Responsable Principal *</label>
-                  <select
-                    required
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-medium"
-                    value={primaryAssignee}
-                    onChange={(e) => setPrimaryAssignee(e.target.value)}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1 font-bold">Apoyo / Secundario</label>
-                  <select
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-white text-gray-900 outline-none text-sm font-medium"
-                    value={secondaryAssignee}
-                    onChange={(e) => setSecondaryAssignee(e.target.value)}
-                  >
-                    <option value="">Ninguno</option>
-                    {users.filter(u => u.id !== primaryAssignee).map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                  <label className="block text-sm font-bold text-gray-800 mb-1">
-                    {isRecurring ? 'Fecha Límite' : 'Fecha Vencimiento'}
-                  </label>
-                  <input
-                    type="datetime-local"
-                    required
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-gray-50 text-gray-900 outline-none text-sm"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                  />
-               </div>
-               <div>
-                  <label className="block text-sm font-bold text-gray-800 mb-1">Prioridad</label>
-                  <select
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 bg-gray-50 text-gray-900 outline-none font-medium"
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as Priority)}
-                  >
-                    {Object.values(Priority).map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-               </div>
-            </div>
-
-            {/* Recurring Task Section */}
-            <div className="p-3 bg-gray-50 rounded-lg border-2 border-gray-200">
-               <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                     <Calendar size={16} className="text-gray-600" />
-                     <span>Tarea Repetitiva</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} />
-                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-700"></div>
-                  </label>
-               </div>
-               
-               {isRecurring && (
-                 <div className="mt-2">
-                    <p className="text-xs text-gray-600 mb-2 font-medium">
-                       Se generarán tareas individuales los días seleccionados hasta la fecha límite.
-                    </p>
-                    <div className="flex gap-2 justify-between">
-                       {DAYS.map((day) => (
-                         <button
-                           key={day.value}
-                           type="button"
-                           onClick={() => toggleDay(day.value)}
-                           className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${selectedDays.includes(day.value) ? 'bg-blue-700 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
-                         >
-                           {day.label}
-                         </button>
-                       ))}
-                    </div>
-                 </div>
-               )}
-            </div>
-
-             {/* Evidence Request Section */}
-             <div className="p-3 bg-gray-50 rounded-lg border-2 border-gray-200">
-               <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                     <FileCheck size={16} className="text-gray-600" />
-                     <span>Solicitar Evidencia (Foto/PDF)</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={requiresEvidence} onChange={e => setRequiresEvidence(e.target.checked)} />
-                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                  </label>
-               </div>
-               {requiresEvidence && <p className="text-xs text-gray-600 mt-2 pl-6 font-medium">El usuario deberá subir una imagen o archivo PDF para completar la tarea.</p>}
-            </div>
-
           </form>
         </div>
 
@@ -367,14 +437,14 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, users, currentUs
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg text-sm font-bold transition-colors"
+            className="px-6 py-2 text-gray-700 hover:bg-gray-200 rounded-lg text-sm font-bold transition-colors"
           >
             Cancelar
           </button>
           <button
             form="task-form"
             type="submit"
-            className="px-4 py-2 bg-blue-700 text-white hover:bg-blue-800 rounded-lg text-sm font-bold shadow-sm transition-colors"
+            className="px-6 py-2 bg-blue-700 text-white hover:bg-blue-800 rounded-lg text-sm font-bold shadow-lg shadow-blue-700/20 transition-all hover:scale-105 active:scale-95"
           >
             Crear Tarea
           </button>
