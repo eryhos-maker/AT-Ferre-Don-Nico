@@ -259,7 +259,8 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
     if (!userIds || userIds.length === 0) return 'Sin asignar';
     return userIds.map(id => {
         const u = users.find(user => user.id === id);
-        return u ? u.name.split(' ')[0] : 'Desconocido';
+        // Changed to return full name instead of splitting
+        return u ? u.name : 'Desconocido';
     }).join(', ');
   };
 
@@ -455,52 +456,60 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
                     </div>
                 )}
 
-                {/* Footer: Assignee, Date, Branch, Links */}
-                <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-gray-600 font-medium pt-2 border-t border-gray-200/40">
-                  <div className="flex items-center gap-2 pr-3 rounded-full">
-                    <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-black shadow-sm">
-                       {getFirstAssigneeInitial(task.assignedTo)}
+                {/* Footer: Split into Left (Assignee/Branch) and Right (Date/Action) */}
+                <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 pt-2 border-t border-gray-200/40 mt-auto">
+                  
+                  {/* Left Side: Assignee and Branch */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 pr-3">
+                      <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-black shadow-sm shrink-0">
+                        {getFirstAssigneeInitial(task.assignedTo)}
+                      </div>
+                      <span className="text-xs text-gray-800 font-bold">{getAssignedNames(task.assignedTo)}</span>
                     </div>
-                    <span className="text-xs text-gray-800">{getAssignedNames(task.assignedTo)}</span>
+
+                    {task.branch && task.branch !== 'General' && (
+                      <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-gray-50 border-gray-200 text-gray-600 w-fit">
+                          <MapPin size={12} />
+                          <span className="truncate max-w-[200px]" title={task.branch}>{task.branch}</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white/60 text-gray-700 border-gray-200/60'}`}>
-                    <Calendar size={14} />
-                    <span className="font-bold mr-1">Vence:</span>
-                    <span>{new Date(task.dueDate).toLocaleDateString()} <span className="opacity-60">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  {/* Right Side: Due Date, Attachment, Evidence */}
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end w-full xl:w-auto">
+                     
+                     <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white/60 text-gray-700 border-gray-200/60'}`}>
+                        <Calendar size={14} />
+                        <span className="font-bold mr-1">Vence:</span>
+                        <span>{new Date(task.dueDate).toLocaleDateString()} <span className="opacity-60">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      </div>
+
+                      {task.attachmentUrl && (
+                        <a 
+                          href={task.attachmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors"
+                          title="Descargar Archivo Adjunto (Soporte)"
+                        >
+                          <Download size={12} /> 
+                          <span>Descargar {task.attachmentName || "Adjunto"}</span>
+                        </a>
+                      )}
+
+                      {task.evidenceUrl && (
+                        <a 
+                          href={task.evidenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-800 hover:text-blue-900 hover:underline text-xs bg-blue-100/50 px-2 py-1 rounded border border-blue-200/50 font-bold transition-colors"
+                        >
+                          <Eye size={12} /> Ver Evidencia
+                        </a>
+                      )}
                   </div>
 
-                  {/* Branch Display */}
-                  {task.branch && task.branch !== 'General' && (
-                     <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-gray-50 border-gray-200 text-gray-600">
-                        <MapPin size={12} />
-                        <span className="truncate max-w-[100px]" title={task.branch}>{task.branch}</span>
-                     </div>
-                  )}
-
-                  {task.attachmentUrl && (
-                    <a 
-                      href={task.attachmentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors"
-                      title="Descargar Archivo Adjunto (Soporte)"
-                    >
-                      <Paperclip size={12} /> 
-                      {task.attachmentName || "Ver Adjunto"}
-                    </a>
-                  )}
-
-                  {task.evidenceUrl && (
-                    <a 
-                      href={task.evidenceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-blue-800 hover:text-blue-900 hover:underline text-xs bg-blue-100/50 px-2 py-1 rounded border border-blue-200/50 font-bold transition-colors ml-auto md:ml-0"
-                    >
-                      <Eye size={12} /> Ver / Descargar
-                    </a>
-                  )}
                 </div>
               </div>
 
