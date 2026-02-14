@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, User, TaskStatus, Priority, Role } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye, Paperclip } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
@@ -442,6 +442,19 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
                     <Calendar size={14} />
                     <span>{new Date(task.dueDate).toLocaleDateString()} <span className="opacity-60">|</span> {new Date(task.dueDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
+
+                  {task.attachmentUrl && (
+                    <a 
+                      href={task.attachmentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline text-xs bg-indigo-50 px-2 py-1 rounded border border-indigo-200 font-bold transition-colors"
+                      title="Descargar Archivo Adjunto (Soporte)"
+                    >
+                      <Paperclip size={12} /> 
+                      {task.attachmentName || "Ver Adjunto"}
+                    </a>
+                  )}
 
                   {task.evidenceUrl && (
                     <a 
