@@ -21,7 +21,8 @@ import {
   updateBranch as apiUpdateBranch,
   deleteBranch as apiDeleteBranch,
   updateTaskStatus as apiUpdateStatus,
-  updateTaskEvidence as apiUpdateEvidence
+  updateTaskEvidence as apiUpdateEvidence,
+  deleteTask as apiDeleteTask
 } from './services/supabaseService';
 
 const App: React.FC = () => {
@@ -192,6 +193,12 @@ const App: React.FC = () => {
     await apiUpdateStatus(taskId, status);
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    // Optimistic Update
+    setTasks(tasks.filter(t => t.id !== taskId));
+    await apiDeleteTask(taskId);
+  };
+
   const handleSaveEvidence = async (taskId: string, evidenceUrl: string) => {
     // Optimistic Update
     setTasks(tasks.map(t => t.id === taskId ? { 
@@ -288,6 +295,7 @@ const App: React.FC = () => {
                   currentUser={currentUser} 
                   onCreateTask={handleCreateTask}
                   onUpdateStatus={handleUpdateStatus}
+                  onDeleteTask={handleDeleteTask}
                   onSaveEvidence={handleSaveEvidence}
                 />
               } 

@@ -261,3 +261,12 @@ export const updateTaskEvidence = async (taskId: string, url: string) => {
     
   if (error) console.error("Error updating evidence:", error);
 };
+
+export const deleteTask = async (taskId: string): Promise<boolean> => {
+  const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+  if (error) {
+    console.error("Error deleting task:", error);
+    return false;
+  }
+  return true;
+};

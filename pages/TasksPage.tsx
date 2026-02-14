@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, User, TaskStatus, Priority, Role } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2 } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
@@ -9,6 +9,7 @@ interface TasksPageProps {
   currentUser: User;
   onCreateTask: (task: Partial<Task>) => void;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
+  onDeleteTask: (taskId: string) => void;
   onSaveEvidence: (taskId: string, evidenceUrl: string) => void;
 }
 
@@ -121,15 +122,16 @@ const ConfirmationModal: React.FC<{
   onConfirm: () => void;
   title: string;
   message: string;
-}> = ({ isOpen, onClose, onConfirm, title, message }) => {
+  isDestructive?: boolean;
+}> = ({ isOpen, onClose, onConfirm, title, message, isDestructive }) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 border border-gray-300 transform transition-all scale-100">
         <div className="flex flex-col items-center text-center">
-          <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
-             <HelpCircle className="text-yellow-600" size={28} />
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${isDestructive ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'}`}>
+             {isDestructive ? <Trash2 size={24} /> : <HelpCircle size={28} />}
           </div>
           <h3 className="text-lg font-black text-gray-900 mb-2">{title}</h3>
           <p className="text-sm text-gray-600 mb-6 font-medium leading-relaxed">
@@ -145,7 +147,7 @@ const ConfirmationModal: React.FC<{
             </button>
             <button 
               onClick={onConfirm}
-              className="flex-1 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-sm font-bold shadow-sm transition-colors"
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors text-white ${isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-700 hover:bg-blue-800'}`}
             >
               Confirmar
             </button>
@@ -156,7 +158,7 @@ const ConfirmationModal: React.FC<{
   );
 };
 
-const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCreateTask, onUpdateStatus, onSaveEvidence }) => {
+const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCreateTask, onUpdateStatus, onDeleteTask, onSaveEvidence }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>(TaskStatus.PENDING);
   const [filterBranch, setFilterBranch] = useState<string>('all');
@@ -165,8 +167,13 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
   // Modals state
   const [evidenceTask, setEvidenceTask] = useState<Task | null>(null);
   const [confirmationData, setConfirmationData] = useState<{task: Task, newStatus: TaskStatus} | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
+  // Authorization checks
   const canCreateTask = ![Role.SUPERVISOR_COM, Role.ENCARGADO_BEREL].includes(currentUser.role);
+  // Only Gerente or specific ADMIN payroll/role users can delete
+  const canDeleteTask = currentUser.role === Role.GERENTE || currentUser.role === Role.JEFE_ADMIN || currentUser.payrollId === 'ADMIN';
+
   const availableBranches = Array.from(new Set(users.map(u => u.branch).filter(Boolean))) as string[];
 
   const getPriorityColor = (priority: Priority) => {
@@ -255,6 +262,17 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
     }
   };
 
+  const handleDeleteClick = (task: Task) => {
+    setTaskToDelete(task);
+  };
+
+  const confirmDelete = () => {
+    if (taskToDelete) {
+      onDeleteTask(taskToDelete.id);
+      setTaskToDelete(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -335,19 +353,32 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
             
             <div className="flex flex-col md:flex-row justify-between gap-4">
               <div className="flex-1">
-                {/* Header Row: Folio, Priority, Evidence Badge */}
-                <div className="flex items-center flex-wrap gap-2 mb-3">
-                  <span className="flex items-center gap-1 bg-white/50 text-gray-700 text-[10px] px-2 py-1 rounded-md font-mono border border-gray-200/50 font-bold tracking-tight shadow-sm" title="Folio de Seguimiento">
-                      <Hash size={10} /> {task.folio}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm ${getPriorityColor(task.priority)}`}>
-                    {task.priority}
-                  </span>
-                  {task.requiresEvidence && (
-                      <span className="flex items-center gap-1 bg-orange-100/80 text-orange-800 text-[10px] px-2 py-0.5 rounded-md font-bold border border-orange-200/50">
-                        <FileText size={10} /> Evidencia
-                      </span>
-                  )}
+                {/* Header Row: Folio, Priority, Evidence Badge, Delete Button */}
+                <div className="flex items-center justify-between mb-3">
+                   <div className="flex items-center flex-wrap gap-2">
+                    <span className="flex items-center gap-1 bg-white/50 text-gray-700 text-[10px] px-2 py-1 rounded-md font-mono border border-gray-200/50 font-bold tracking-tight shadow-sm" title="Folio de Seguimiento">
+                        <Hash size={10} /> {task.folio}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm ${getPriorityColor(task.priority)}`}>
+                      {task.priority}
+                    </span>
+                    {task.requiresEvidence && (
+                        <span className="flex items-center gap-1 bg-orange-100/80 text-orange-800 text-[10px] px-2 py-0.5 rounded-md font-bold border border-orange-200/50">
+                          <FileText size={10} /> Evidencia
+                        </span>
+                    )}
+                   </div>
+                   
+                   {/* Delete Button - Only for Admin/Gerente */}
+                   {canDeleteTask && (
+                      <button 
+                        onClick={() => handleDeleteClick(task)}
+                        className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-red-50"
+                        title="Eliminar Tarea (Admin)"
+                      >
+                         <Trash2 size={16} />
+                      </button>
+                   )}
                 </div>
                 
                 {/* Title & Description */}
@@ -386,11 +417,12 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
 
                   {task.evidenceUrl && (
                     <a 
-                      href="#" 
+                      href={task.evidenceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="flex items-center gap-1 text-blue-800 hover:text-blue-900 hover:underline text-xs bg-blue-100/50 px-2 py-1 rounded border border-blue-200/50 font-bold transition-colors ml-auto md:ml-0"
-                      onClick={(e) => { e.preventDefault(); alert("Abriendo evidencia: " + task.evidenceUrl); }}
                     >
-                      <ExternalLink size={12} /> Ver Evidencia
+                      <Download size={12} /> Descargar Evidencia
                     </a>
                   )}
                 </div>
@@ -468,7 +500,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
         />
       )}
 
-      {/* Confirmation Modal (New) */}
+      {/* Confirmation Modal (Status Change) */}
       {confirmationData && (
         <ConfirmationModal
           isOpen={true}
@@ -476,6 +508,18 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, currentUser, onCrea
           message={`Estás a punto de marcar la tarea "${confirmationData.task.title}" como Completada. Esta acción quedará registrada en el historial.`}
           onClose={() => setConfirmationData(null)}
           onConfirm={confirmStatusChange}
+        />
+      )}
+
+      {/* Delete Confirmation Modal (New) */}
+      {taskToDelete && (
+        <ConfirmationModal
+          isOpen={true}
+          title="¿Eliminar Tarea?"
+          message={`¿Estás seguro que deseas eliminar la tarea "${taskToDelete.title}"? Esta acción no se puede deshacer.`}
+          onClose={() => setTaskToDelete(null)}
+          onConfirm={confirmDelete}
+          isDestructive={true}
         />
       )}
     </div>
