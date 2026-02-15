@@ -7,14 +7,15 @@ import TasksPage from './pages/TasksPage';
 import DocsPage from './pages/DocsPage';
 import TeamPage from './pages/TeamPage';
 import SettingsPage from './pages/SettingsPage';
-import { User, Task, TaskStatus, Role, Branch } from './types';
+import { User, Task, TaskStatus, Role, Branch, Priority } from './types';
 import { sendOverdueNotification, sendUpcomingDeadlineNotification, requestNotificationPermission } from './services/notificationService';
+import { supabase } from './lib/supabaseClient';
 import { 
   fetchUsers, 
   fetchBranches, 
   fetchTasks, 
   createTask as apiCreateTask, 
-  updateTask as apiUpdateTask, // Import new updateTask
+  updateTask as apiUpdateTask, 
   createUser as apiCreateUser,
   updateUser as apiUpdateUser,
   deleteUser as apiDeleteUser,
@@ -24,7 +25,8 @@ import {
   updateTaskStatus as apiUpdateStatus,
   updateTaskEvidence as apiUpdateEvidence,
   uploadFile,
-  deleteTask as apiDeleteTask
+  deleteTask as apiDeleteTask,
+  mapTaskFromDB
 } from './services/supabaseService';
 
 const App: React.FC = () => {
@@ -59,6 +61,33 @@ const App: React.FC = () => {
     
     // Request Notification Permission on load
     requestNotificationPermission();
+
+    // --- REALTIME SUBSCRIPTION ---
+    // This allows all roles to see updates immediately without refreshing
+    const channel = supabase
+      .channel('tasks_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+         // payload.new contains the raw DB row. We map it to our App Interface.
+         
+         if (payload.eventType === 'INSERT') {
+            const newTask = mapTaskFromDB(payload.new);
+            // Append new task
+            setTasks(prev => [newTask, ...prev]);
+         } else if (payload.eventType === 'UPDATE') {
+            const updatedTask = mapTaskFromDB(payload.new);
+            // Replace existing task
+            setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+         } else if (payload.eventType === 'DELETE') {
+            // Remove task
+            setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+         }
+      })
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+       supabase.removeChannel(channel);
+    }
   }, []);
 
   // Permission Logic
@@ -151,89 +180,88 @@ const App: React.FC = () => {
   };
 
   const handleCreateTask = async (newTask: Partial<Task>, attachmentFile?: File) => {
-    let attachmentUrl = undefined;
+    try {
+      let attachmentUrl = undefined;
 
-    // 1. Upload Attachment if present
-    if (attachmentFile) {
-       const url = await uploadFile(attachmentFile, 'attachments');
-       if (url) {
-          attachmentUrl = url;
-       } else {
-         // Si falla la subida (por error de politica o red), cancelamos la creación
-         console.warn("Upload failed, cancelling task creation");
-         return; 
-       }
-    }
-
-    // Determine Branch logic
-    // Priority: Explicitly selected Branch -> Assignee's Branch -> General
-    let taskBranch = newTask.branch;
-
-    if (!taskBranch && newTask.assignedTo && newTask.assignedTo.length > 0) {
-       const assignee = users.find(u => u.id === newTask.assignedTo![0]);
-       if (assignee && assignee.branch) {
-          taskBranch = assignee.branch; 
-       }
-    }
-
-    if (!taskBranch) taskBranch = 'General';
-
-    // Basic Task Structure
-    const baseTask: Partial<Task> = {
-      title: newTask.title || '',
-      assignedTo: newTask.assignedTo || [],
-      dueDate: newTask.dueDate,
-      status: TaskStatus.PENDING,
-      attachmentUrl: attachmentUrl || newTask.attachmentUrl,
-      evidenceUrl: '', // Empty initially
-      branch: taskBranch // Save branch
-    };
-
-    const createdTasks: Task[] = [];
-
-    // NOTE: Supabase DB schema provided does NOT support Recurring logic natively.
-    // We will generate individual rows for each recurring instance immediately.
-    
-    if (newTask.isRecurring && newTask.recurringDays && newTask.recurringDays.length > 0 && newTask.dueDate) {
-       const startDate = new Date();
-       // FIX: Start recurring tasks from tomorrow (day + 1) to avoid creating a task for the current day.
-       startDate.setDate(startDate.getDate() + 1); 
-       startDate.setHours(0,0,0,0);
-       
-       const endDate = new Date(newTask.dueDate);
-       endDate.setHours(23,59,59,999); 
-
-       const loopDate = new Date(startDate);
-
-       while (loopDate <= endDate) {
-         if (newTask.recurringDays.includes(loopDate.getDay())) {
-            const specificDueDate = new Date(loopDate);
-            specificDueDate.setHours(18, 0, 0, 0);
-
-            const taskToCreate = {
-               ...baseTask,
-               folio: generateFolio(loopDate),
-               dueDate: specificDueDate.toISOString(),
-            };
-            
-            const savedTask = await apiCreateTask(taskToCreate);
-            if (savedTask) createdTasks.push(savedTask);
+      // 1. Upload Attachment if present
+      if (attachmentFile) {
+         const url = await uploadFile(attachmentFile, 'attachments');
+         if (url) {
+            attachmentUrl = url;
+         } else {
+           console.warn("Upload failed, cancelling task creation");
+           return; 
          }
-         loopDate.setDate(loopDate.getDate() + 1);
-       }
-    } else {
-       // Single Task
-       const taskToCreate = {
-        ...baseTask,
-        folio: generateFolio(new Date()),
-        dueDate: newTask.dueDate || new Date().toISOString(),
-      };
-      const savedTask = await apiCreateTask(taskToCreate);
-      if (savedTask) createdTasks.push(savedTask);
-    }
+      }
 
-    if (createdTasks.length > 0) {
-      setTasks(prev => [...createdTasks, ...prev]);
+      // Determine Branch logic
+      let taskBranch = newTask.branch;
+      if (!taskBranch && newTask.assignedTo && newTask.assignedTo.length > 0) {
+         const assignee = users.find(u => u.id === newTask.assignedTo![0]);
+         if (assignee && assignee.branch) {
+            taskBranch = assignee.branch; 
+         }
+      }
+      if (!taskBranch) taskBranch = 'General';
+
+      // Basic Task Structure
+      const baseTask: Partial<Task> = {
+        title: newTask.title || '',
+        description: newTask.description || '', 
+        assignedTo: newTask.assignedTo || [],
+        dueDate: newTask.dueDate,
+        status: TaskStatus.PENDING,
+        priority: newTask.priority || Priority.MEDIUM,
+        requiresEvidence: newTask.requiresEvidence || false,
+        attachmentUrl: attachmentUrl || newTask.attachmentUrl,
+        evidenceUrl: '', 
+        branch: taskBranch 
+      };
+
+      if (newTask.isRecurring && newTask.recurringDays && newTask.recurringDays.length > 0 && newTask.dueDate) {
+         const startDate = new Date();
+         startDate.setDate(startDate.getDate() + 1); 
+         startDate.setHours(0,0,0,0);
+         
+         const endDate = new Date(newTask.dueDate);
+         endDate.setHours(23,59,59,999); 
+
+         const loopDate = new Date(startDate);
+         const promises = [];
+
+         while (loopDate <= endDate) {
+           if (newTask.recurringDays.includes(loopDate.getDay())) {
+              const specificDueDate = new Date(loopDate);
+              specificDueDate.setHours(18, 0, 0, 0);
+
+              const taskToCreate = {
+                 ...baseTask,
+                 folio: generateFolio(loopDate),
+                 dueDate: specificDueDate.toISOString(),
+              };
+              
+              promises.push(apiCreateTask(taskToCreate, currentUser?.id));
+           }
+           loopDate.setDate(loopDate.getDate() + 1);
+         }
+         await Promise.all(promises);
+
+      } else {
+         // Single Task
+         const taskToCreate = {
+          ...baseTask,
+          folio: generateFolio(new Date()),
+          dueDate: newTask.dueDate || new Date().toISOString(),
+        };
+        const result = await apiCreateTask(taskToCreate, currentUser?.id);
+        if (!result) {
+          // Si el servicio retornó null, hubo error (ya se mostró alert dentro del servicio, pero aquí detenemos flujo si fuera necesario)
+        }
+      }
+      
+    } catch (e) {
+      console.error("Error creating task in App.tsx", e);
+      alert("Hubo un error inesperado al crear la tarea.");
     }
   };
 
@@ -253,50 +281,44 @@ const App: React.FC = () => {
         attachmentUrl
     };
 
-    // Call API
-    const result = await apiUpdateTask(updatedTaskData);
-    
-    if (result) {
-        // Update Local State
-        setTasks(prev => prev.map(t => t.id === result.id ? result : t));
-    }
+    // Call API (Realtime will update state)
+    // Pass currentUser.id for logging
+    await apiUpdateTask(updatedTaskData, currentUser?.id);
   };
 
   const handleUpdateStatus = async (taskId: string, status: TaskStatus) => {
-    // Optimistic Update
+    // Optimistic Update for immediate feedback
     setTasks(tasks.map(t => t.id === taskId ? { ...t, status } : t));
-    await apiUpdateStatus(taskId, status);
+    // Pass currentUser.id for logging
+    await apiUpdateStatus(taskId, status, currentUser?.id);
   };
 
   const handleDeleteTask = async (taskId: string) => {
     // Optimistic Update
     setTasks(tasks.filter(t => t.id !== taskId));
-    await apiDeleteTask(taskId);
+    await apiDeleteTask(taskId, currentUser?.id);
   };
 
   const handleSaveEvidence = async (taskId: string, file: File) => {
     try {
-      // 1. Upload to Supabase Storage (Using the generic uploadFile with 'evidence' folder)
+      // 1. Upload to Supabase Storage
       const publicUrl = await uploadFile(file, 'evidence');
       
-      if (!publicUrl) {
-        // Alert already shown by uploadFile
-        return;
-      }
+      if (!publicUrl) return;
 
-      // 2. Update Database with URL
-      await apiUpdateEvidence(taskId, publicUrl);
-
-      // 3. Update Local State
+      // 2. Update Database (Realtime will sync state for others)
+      // Local optimistic update
       setTasks(tasks.map(t => t.id === taskId ? { 
         ...t, 
         evidenceUrl: publicUrl, 
         status: TaskStatus.COMPLETED 
       } : t));
 
+      // Pass currentUser.id for logging
+      await apiUpdateEvidence(taskId, publicUrl, currentUser?.id);
+
     } catch (error) {
       console.error("Error saving evidence:", error);
-      // alert("Ocurrió un error inesperado al guardar la evidencia.");
     }
   };
 
@@ -321,7 +343,7 @@ const App: React.FC = () => {
         if (success) {
            setUsers(prev => prev.filter(u => u.id !== userId));
         } else {
-           alert("No se pudo eliminar el usuario. Verifique que no tenga tareas asignadas.");
+           // Alert handled in service
         }
      }
   };

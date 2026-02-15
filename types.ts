@@ -73,6 +73,15 @@ export interface Task {
   upcomingNotificationSent?: boolean; // Flag para saber si ya se avisó 24h antes
 }
 
+export interface AuditLog {
+  id: string;
+  taskId: string;
+  userId: string;
+  action: 'CREATE' | 'UPDATE_STATUS' | 'UPDATE_DETAILS' | 'UPLOAD_EVIDENCE' | 'DELETE';
+  details: string;
+  createdAt: string;
+}
+
 export interface Stat {
   label: string;
   value: string | number;

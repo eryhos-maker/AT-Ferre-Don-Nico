@@ -389,9 +389,13 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
             const totalSubtasks = task.subtasks?.length || 0;
             const subtaskProgress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
             const cardStyles = getTaskCardStyles(task.status);
+            
+            // Branch Display Logic: Use task branch, or fallback to assignee's branch
+            const firstAssignee = users.find(u => u.id === task.assignedTo?.[0]);
+            const displayBranch = task.branch || firstAssignee?.branch;
 
             return (
-          <div key={task.id} className={`relative p-5 rounded-xl border border-l-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:scale-[1.01] ${cardStyles} group`}>
+          <div key={task.id} className={`relative p-5 rounded-xl border border-l-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:scale-[1.01] hover:-translate-y-1 ${cardStyles} group`}>
             
             <div className="flex flex-col md:flex-row justify-between gap-4">
               <div className="flex-1">
@@ -468,10 +472,10 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
                       <span className="text-xs text-gray-800 font-bold">{getAssignedNames(task.assignedTo)}</span>
                     </div>
 
-                    {task.branch && task.branch !== 'General' && (
+                    {displayBranch && (
                       <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-gray-50 border-gray-200 text-gray-600 w-fit">
                           <MapPin size={12} />
-                          <span className="truncate max-w-[200px]" title={task.branch}>{task.branch}</span>
+                          <span className="truncate max-w-[200px]" title={displayBranch}>Sucursal: {displayBranch}</span>
                       </div>
                     )}
                   </div>
