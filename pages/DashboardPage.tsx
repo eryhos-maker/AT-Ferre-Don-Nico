@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Task, User, TaskStatus, Priority } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AlertCircle, CheckCircle2, Clock, PlayCircle, Sparkles, FileText, Download, Paperclip, Eye } from 'lucide-react';
@@ -18,6 +18,43 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ tasks, currentUser }) => 
     generateExecutiveSummary(tasks).then(setSummary);
   }, [tasks]);
 
+  // OPTIMIZACIÓN: Calcular todas las estadísticas en una sola iteración (O(N)) en lugar de múltiples filters.
+  const { statusCounts, priorityCounts, completedTasks } = useMemo(() => {
+    const sCounts = {
+      [TaskStatus.PENDING]: 0,
+      [TaskStatus.IN_PROGRESS]: 0,
+      [TaskStatus.COMPLETED]: 0,
+      [TaskStatus.OVERDUE]: 0
+    };
+    
+    const pCounts: Record<string, number> = {};
+    Object.values(Priority).forEach(p => pCounts[p] = 0);
+
+    const completed: Task[] = [];
+
+    tasks.forEach(t => {
+      // Conteo de Estados
+      if (sCounts[t.status] !== undefined) {
+        sCounts[t.status]++;
+      }
+      
+      // Conteo de Prioridad
+      if (pCounts[t.priority] !== undefined) {
+        pCounts[t.priority]++;
+      }
+
+      // Filtrado de completadas para la tabla
+      if (t.status === TaskStatus.COMPLETED) {
+        completed.push(t);
+      }
+    });
+
+    // Ordenar completadas por fecha descendente
+    completed.sort((a,b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
+
+    return { statusCounts: sCounts, priorityCounts: pCounts, completedTasks: completed };
+  }, [tasks]);
+
   const stats = [
     {
       label: 'Total Tareas',
@@ -27,37 +64,35 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ tasks, currentUser }) => 
     },
     {
       label: 'Pendientes',
-      value: tasks.filter(t => t.status === TaskStatus.PENDING).length,
+      value: statusCounts[TaskStatus.PENDING],
       icon: <Clock className="text-yellow-600" size={24} />,
       bg: 'bg-yellow-100'
     },
     {
       label: 'En Progreso',
-      value: tasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length,
+      value: statusCounts[TaskStatus.IN_PROGRESS],
       icon: <PlayCircle className="text-indigo-600" size={24} />,
       bg: 'bg-indigo-100'
     },
     {
       label: 'Vencidas',
-      value: tasks.filter(t => t.status === TaskStatus.OVERDUE).length,
+      value: statusCounts[TaskStatus.OVERDUE],
       icon: <AlertCircle className="text-red-600" size={24} />,
       bg: 'bg-red-100'
     }
   ];
 
   const statusData = [
-    { name: 'Pendiente', value: tasks.filter(t => t.status === TaskStatus.PENDING).length },
-    { name: 'En Progreso', value: tasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length },
-    { name: 'Completada', value: tasks.filter(t => t.status === TaskStatus.COMPLETED).length },
-    { name: 'Vencida', value: tasks.filter(t => t.status === TaskStatus.OVERDUE).length },
+    { name: 'Pendiente', value: statusCounts[TaskStatus.PENDING] },
+    { name: 'En Progreso', value: statusCounts[TaskStatus.IN_PROGRESS] },
+    { name: 'Completada', value: statusCounts[TaskStatus.COMPLETED] },
+    { name: 'Vencida', value: statusCounts[TaskStatus.OVERDUE] },
   ];
 
   const priorityData = Object.values(Priority).map(p => ({
     name: p,
-    cantidad: tasks.filter(t => t.priority === p).length
+    cantidad: priorityCounts[p] || 0
   }));
-
-  const completedTasks = tasks.filter(t => t.status === TaskStatus.COMPLETED).sort((a,b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
 
   return (
     <div className="space-y-6 pb-8">
@@ -95,9 +130,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ tasks, currentUser }) => 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col">
           <h3 className="text-lg font-black text-gray-900 mb-6">Estado de Tareas</h3>
-          <div className="h-64">
+          <div className="h-64 w-full flex-1 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -118,7 +153,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ tasks, currentUser }) => 
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex justify-center gap-4 text-sm text-gray-700 font-bold mt-4">
+          <div className="flex justify-center gap-4 text-sm text-gray-700 font-bold mt-4 flex-wrap">
             {statusData.map((entry, index) => (
               <div key={index} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
@@ -128,9 +163,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ tasks, currentUser }) => 
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col">
           <h3 className="text-lg font-black text-gray-900 mb-6">Distribución por Prioridad</h3>
-          <div className="h-64">
+          <div className="h-64 w-full flex-1 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={priorityData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />

@@ -71,8 +71,11 @@ const App: React.FC = () => {
          
          if (payload.eventType === 'INSERT') {
             const newTask = mapTaskFromDB(payload.new);
-            // Append new task
-            setTasks(prev => [newTask, ...prev]);
+            // Append new task - Check for duplicates to avoid double add from optimistic update
+            setTasks(prev => {
+                if (prev.find(t => t.id === newTask.id)) return prev;
+                return [newTask, ...prev];
+            });
          } else if (payload.eventType === 'UPDATE') {
             const updatedTask = mapTaskFromDB(payload.new);
             // Replace existing task
@@ -96,16 +99,19 @@ const App: React.FC = () => {
   const isGerente = currentUser?.role === Role.GERENTE;
 
   // VISIBILITY FILTER:
-  // Encargados Berel and Supervisor Comercial only see tasks from their own branch
+  // Encargados Berel and Supervisor Comercial usually see tasks from their own branch.
+  // UPDATE: They must ALSO see tasks assigned to them (Primary or Secondary) regardless of branch.
   const getVisibleTasks = () => {
     if (!currentUser) return [];
 
     const RESTRICTED_ROLES = [Role.ENCARGADO_BEREL, Role.SUPERVISOR_COM];
     
     if (RESTRICTED_ROLES.includes(currentUser.role)) {
-       // Filter by branch match
-       // Note: If user has no branch set, they might see nothing or only tasks with no branch.
-       return tasks.filter(t => t.branch === currentUser.branch);
+       return tasks.filter(t => {
+         const isAssignedToMe = t.assignedTo && t.assignedTo.includes(currentUser.id);
+         const isMyBranch = t.branch === currentUser.branch;
+         return isAssignedToMe || isMyBranch;
+       });
     }
 
     // Gerentes, Admins, etc. see all tasks
@@ -228,6 +234,7 @@ const App: React.FC = () => {
 
          const loopDate = new Date(startDate);
          const promises = [];
+         const createdTasks: Task[] = [];
 
          while (loopDate <= endDate) {
            if (newTask.recurringDays.includes(loopDate.getDay())) {
@@ -240,11 +247,14 @@ const App: React.FC = () => {
                  dueDate: specificDueDate.toISOString(),
               };
               
-              promises.push(apiCreateTask(taskToCreate, currentUser?.id));
+              promises.push(apiCreateTask(taskToCreate, currentUser?.id).then(t => { if(t) createdTasks.push(t); }));
            }
            loopDate.setDate(loopDate.getDate() + 1);
          }
          await Promise.all(promises);
+         
+         // Optimistic Update for Recurring
+         setTasks(prev => [...createdTasks, ...prev]);
 
       } else {
          // Single Task
@@ -254,8 +264,10 @@ const App: React.FC = () => {
           dueDate: newTask.dueDate || new Date().toISOString(),
         };
         const result = await apiCreateTask(taskToCreate, currentUser?.id);
-        if (!result) {
-          // Si el servicio retornó null, hubo error (ya se mostró alert dentro del servicio, pero aquí detenemos flujo si fuera necesario)
+        
+        if (result) {
+            // Optimistic Update for Single Task
+            setTasks(prev => [result, ...prev]);
         }
       }
       
@@ -281,8 +293,16 @@ const App: React.FC = () => {
         attachmentUrl
     };
 
-    // Call API (Realtime will update state)
-    // Pass currentUser.id for logging
+    // Optimistic Update for Details
+    // We construct a "complete enough" task object to update the UI immediately
+    setTasks(prev => prev.map(t => {
+        if (t.id === updatedTaskData.id) {
+            return { ...t, ...updatedTaskData } as Task;
+        }
+        return t;
+    }));
+
+    // Call API (Realtime will confirm sync later)
     await apiUpdateTask(updatedTaskData, currentUser?.id);
   };
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, User, TaskStatus, Priority, Role, Branch } from '../types';
-import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye, Paperclip, Edit2 } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, AlertTriangle, CheckCircle, Clock, ListTodo, Hash, Upload, FileText, X, ExternalLink, MapPin, MoreVertical, HelpCircle, Download, Trash2, Eye, Paperclip, Edit2, UserPlus, Users } from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 
 interface TasksPageProps {
@@ -255,21 +255,6 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
     return matchesSearch && matchesStatus && matchesBranch;
   });
 
-  const getAssignedNames = (userIds: string[]) => {
-    if (!userIds || userIds.length === 0) return 'Sin asignar';
-    return userIds.map(id => {
-        const u = users.find(user => user.id === id);
-        // Changed to return full name instead of splitting
-        return u ? u.name : 'Desconocido';
-    }).join(', ');
-  };
-
-  const getFirstAssigneeInitial = (userIds: string[]) => {
-      if (!userIds || userIds.length === 0) return '?';
-      const u = users.find(user => user.id === userIds[0]);
-      return u ? u.name.charAt(0) : '?';
-  };
-
   const handleStatusChangeAttempt = (task: Task, newStatusStr: string) => {
     const newStatus = newStatusStr as TaskStatus;
 
@@ -463,17 +448,36 @@ const TasksPage: React.FC<TasksPageProps> = ({ tasks, users, branches, currentUs
                 {/* Footer: Split into Left (Assignee/Branch) and Right (Date/Action) */}
                 <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 pt-2 border-t border-gray-200/40 mt-auto">
                   
-                  {/* Left Side: Assignee and Branch */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 pr-3">
-                      <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-black shadow-sm shrink-0">
-                        {getFirstAssigneeInitial(task.assignedTo)}
-                      </div>
-                      <span className="text-xs text-gray-800 font-bold">{getAssignedNames(task.assignedTo)}</span>
-                    </div>
+                  {/* Left Side: Assignee List (Updated for Clarity) */}
+                  <div className="flex flex-col gap-2">
+                    {task.assignedTo && task.assignedTo.length > 0 ? (
+                        task.assignedTo.map((userId, index) => {
+                            const user = users.find(u => u.id === userId);
+                            const isSecondary = index > 0;
+                            if (!user) return null;
+
+                            return (
+                                <div key={userId} className="flex items-center gap-2">
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-sm shrink-0 border ${isSecondary ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white text-gray-700 border-gray-200'}`}>
+                                        {user.name.charAt(0)}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className={`text-xs font-bold ${isSecondary ? 'text-purple-900' : 'text-gray-900'}`}>
+                                            {user.name}
+                                        </span>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide border ${isSecondary ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                            {isSecondary ? 'Apoyo' : 'Responsable'}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <span className="text-xs text-gray-400 font-medium italic">Sin asignar</span>
+                    )}
 
                     {displayBranch && (
-                      <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-gray-50 border-gray-200 text-gray-600 w-fit">
+                      <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-gray-50 border-gray-200 text-gray-600 w-fit mt-1">
                           <MapPin size={12} />
                           <span className="truncate max-w-[200px]" title={displayBranch}>Sucursal: {displayBranch}</span>
                       </div>
