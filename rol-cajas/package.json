@@ -1,0 +1,10 @@
+{
+  "name": "rol-cajas-ferre-mina",
+  "private": true,
+  "type": "commonjs",
+  "description": "Rol de Cajas – Ferre Mina. App de una sola página, no requiere instalar nada.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "ejemplos": "node ejemplos/generar-ejemplos.js"
+  }
+}

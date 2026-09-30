@@ -18,3 +18,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/1LK92xYeBrpXvSlyJdRhpxA
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+---
+
+## Rol de Cajas – Ferre Mina
+
+App independiente en la carpeta [`rol-cajas/`](rol-cajas/README.md): genera el rol de cajas a partir de GIRHA y las ventas por hora de SAP. No necesita instalar nada.

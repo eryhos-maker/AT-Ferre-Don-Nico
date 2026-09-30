@@ -1,0 +1,57 @@
+{
+  "tipo": "catalogo-rol-cajas",
+  "version": 1,
+  "sucursal": "Ferre Mina",
+  "personal": [
+    {
+      "nomina": "1001",
+      "nombre": "ANA",
+      "color": "#FFD966"
+    },
+    {
+      "nomina": "1002",
+      "nombre": "BETO",
+      "color": "#9BC2E6"
+    },
+    {
+      "nomina": "1003",
+      "nombre": "CARLA",
+      "color": "#A9D08E"
+    },
+    {
+      "nomina": "1004",
+      "nombre": "DIEGO",
+      "color": "#F4B084"
+    },
+    {
+      "nomina": "1005",
+      "nombre": "ELENA",
+      "color": "#C9A0DC"
+    },
+    {
+      "nomina": "1006",
+      "nombre": "FER",
+      "color": "#FF9F9F"
+    },
+    {
+      "nomina": "1007",
+      "nombre": "GABY",
+      "color": "#8EA9DB"
+    },
+    {
+      "nomina": "1008",
+      "nombre": "HUGO",
+      "color": "#FFE699"
+    },
+    {
+      "nomina": "1009",
+      "nombre": "IVÁN",
+      "color": "#C6E0B4"
+    },
+    {
+      "nomina": "1010",
+      "nombre": "JUANA",
+      "color": "#F8CBAD"
+    }
+  ]
+}
