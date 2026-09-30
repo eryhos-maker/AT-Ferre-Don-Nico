@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rol de Cajas · Ferre Mina</title>
+  <meta name="description" content="Genera el rol de cajas de Ferre Mina a partir de GIRHA y las ventas por hora de SAP. Todo se procesa en tu computadora.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%A7%BE%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <span class="logo" aria-hidden="true">🧾</span>
+      <div>
+        <h1>Rol de Cajas · Ferre Mina</h1>
+        <p class="sub">Tus archivos no salen de esta computadora.</p>
+      </div>
+    </div>
+    <nav id="pestanas" class="pestanas" aria-label="Pasos"></nav>
+  </header>
+
+  <main>
+    <!-- 1. Personal -->
+    <section id="tab-personal" class="tab" hidden>
+      <h2>1 · Personal de Ferre Mina</h2>
+      <p class="ayuda">Aquí va la lista de vendedores con su número de nómina, un nombre corto y su color. Guárdala con <b>Exportar catálogo</b> y la próxima vez solo impórtala.</p>
+      <div class="acciones">
+        <label class="btn">📂 Importar catálogo (JSON)<input type="file" id="in-catalogo" accept=".json,application/json" hidden></label>
+        <button class="btn" id="btn-exp-catalogo">💾 Exportar catálogo</button>
+        <button class="btn" id="btn-agregar">➕ Agregar persona</button>
+        <button class="btn sec" id="btn-ejemplo">🧪 Probar con datos de ejemplo</button>
+      </div>
+      <div id="personal-cuerpo"></div>
+    </section>
+
+    <!-- 2. GIRHA -->
+    <section id="tab-girha" class="tab" hidden>
+      <h2>2 · Horarios GIRHA</h2>
+      <p class="ayuda">Sube el archivo de carga masiva de GIRHA (Excel o CSV) con 4 columnas: clave empresa, nómina, fecha y clave de horario. Solo se toma en cuenta al personal del catálogo.</p>
+      <div class="acciones">
+        <label class="btn pri">📂 Subir archivo GIRHA<input type="file" id="in-girha" accept=".xlsx,.xls,.csv" hidden></label>
+      </div>
+      <div id="girha-cuerpo"></div>
+    </section>
+
+    <!-- 3. Vendedores de la semana -->
+    <section id="tab-semana" class="tab" hidden>
+      <h2>3 · ¿Quién entra a caja esta semana?</h2>
+      <p class="ayuda">Marca a los vendedores que pueden cubrir Caja 1 y Caja 2. Los que no marques pueden seguir apoyando en Caja 3 en horas pico.</p>
+      <div id="semana-cuerpo"></div>
+    </section>
+
+    <!-- 4. Ventas -->
+    <section id="tab-ventas" class="tab" hidden>
+      <h2>4 · Ventas por hora (SAP) <span class="opcional">opcional</span></h2>
+      <p class="ayuda">Con este reporte la app calcula cuántas cajas necesitas cada hora y cuándo abrir la Caja 3. <b>Puedes armar el rol sin él</b>: cuando lo tengas, súbelo y presiona <b>Actualizar apoyos Caja 3</b>. Tus turnos de Caja 1 y Caja 2 no cambian.</p>
+      <div class="acciones">
+        <label class="btn pri">📂 Subir reporte de ventas<input type="file" id="in-sap" accept=".xlsx,.xls,.csv" hidden></label>
+      </div>
+      <div id="ventas-cuerpo"></div>
+    </section>
+
+    <!-- 5. Parámetros -->
+    <section id="tab-parametros" class="tab" hidden>
+      <h2>5 · Parámetros</h2>
+      <p class="ayuda">Las reglas del rol. Si cambias algo, vuelve a generar el rol para aplicarlo. Se guardan junto con el catálogo.</p>
+      <div id="parametros-cuerpo"></div>
+    </section>
+
+    <!-- 6. Rol -->
+    <section id="tab-rol" class="tab" hidden>
+      <div class="acciones no-print">
+        <button class="btn pri" id="btn-generar2">⚙️ Generar rol de nuevo</button>
+        <button class="btn" id="btn-apoyos">🔁 Actualizar apoyos Caja 3</button>
+        <button class="btn" id="btn-excel">📊 Exportar a Excel</button>
+        <button class="btn" id="btn-imprimir">🖨️ Imprimir / PDF</button>
+      </div>
+      <div id="rol-cuerpo"></div>
+    </section>
+
+    <!-- 7. Por día -->
+    <section id="tab-dia" class="tab" hidden>
+      <h2>Vista por día · hora por hora</h2>
+      <div id="dia-cuerpo"></div>
+    </section>
+  </main>
+
+  <dialog id="modal">
+    <form method="dialog" class="modal-caja" id="modal-form">
+      <div id="modal-cuerpo"></div>
+    </form>
+  </dialog>
+
+  <div id="aviso" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/excel.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,685 @@
+/*
+ * Rol de Cajas – Ferre Mina
+ * Motor de reglas: lectura de GIRHA y SAP, armado del rol y validación.
+ * No toca la pantalla, así que también se puede probar con Node.
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.RolCore = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ---------------------------------------------------------------- días
+
+  const DIAS = [
+    { cod: 'JUE', nombre: 'JUEVES', dow: 4 },
+    { cod: 'VIE', nombre: 'VIERNES', dow: 5 },
+    { cod: 'SAB', nombre: 'SÁBADO', dow: 6 },
+    { cod: 'DOM', nombre: 'DOMINGO', dow: 0 },
+    { cod: 'LUN', nombre: 'LUNES', dow: 1 },
+    { cod: 'MAR', nombre: 'MARTES', dow: 2 },
+    { cod: 'MIE', nombre: 'MIÉRCOLES', dow: 3 },
+  ];
+  const FIN_DE_SEMANA = new Set(['SAB', 'DOM']);
+  const COD_POR_DOW = {};
+  DIAS.forEach((d) => { COD_POR_DOW[d.dow] = d.cod; });
+
+  const COLORES = [
+    '#FFD966', '#9BC2E6', '#A9D08E', '#F4B084', '#C9A0DC', '#FF9F9F', '#8EA9DB',
+    '#FFE699', '#C6E0B4', '#F8CBAD', '#B4C6E7', '#99E0DA', '#E6B8B7', '#D9D9D9',
+  ];
+
+  function configInicial() {
+    return {
+      horario: {
+        JUE: { ab: '08:00', ci: '21:00' },
+        VIE: { ab: '08:00', ci: '21:00' },
+        SAB: { ab: '08:00', ci: '21:00' },
+        DOM: { ab: '08:00', ci: '19:00' },
+        LUN: { ab: '08:00', ci: '21:00' },
+        MAR: { ab: '08:00', ci: '21:00' },
+        MIE: { ab: '08:00', ci: '21:00' },
+      },
+      capacidad: 30, // tickets por hora que atiende una caja
+      maxDias: 3, // días máximos en Caja 1 / Caja 2 por vendedor
+      turnoMin: 3, // horas
+      turnoMax: 6, // horas
+      paso: 30, // minutos (30 = medias horas, 60 = horas completas)
+    };
+  }
+
+  // --------------------------------------------------------------- horas
+
+  function aMin(txt) {
+    if (txt == null || txt === '') return null;
+    const m = String(txt).trim().match(/^(\d{1,2})(?::(\d{2}))?$/);
+    if (!m) return null;
+    const h = +m[1], mm = +(m[2] || 0);
+    if (h > 24 || mm > 59) return null;
+    return h * 60 + mm;
+  }
+
+  function aHora(min) {
+    const h = Math.floor(min / 60), m = min % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  // Formato corto estilo rol en Excel: 600 -> "10", 870 -> "2:30"
+  function corta(min) {
+    let h = Math.floor(min / 60) % 12;
+    if (h === 0) h = 12;
+    const m = min % 60;
+    return m ? h + ':' + String(m).padStart(2, '0') : String(h);
+  }
+  function rangoCorto(ini, fin) { return corta(ini) + '–' + corta(fin); }
+  function rangoLargo(ini, fin) { return aHora(ini) + '–' + aHora(fin); }
+  function horasTxt(min) {
+    const h = min / 60;
+    return (Number.isInteger(h) ? h : h.toFixed(1)) + ' h';
+  }
+
+  // -------------------------------------------------------------- fechas
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fechaISO(y, m, d) { return y + '-' + pad(m) + '-' + pad(d); }
+
+  function fechaValida(y, m, d) {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
+
+  function desdeSerial(n) {
+    const ms = Math.round((n - 25569) * 86400000);
+    const dt = new Date(ms);
+    return fechaISO(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+
+  // Acepta: Date, número de serie de Excel, "YYYY-MM-DD", "DD/MM/YYYY",
+  // "DD.MM.YYYY" (SAP), "YYYYMMDD" y cualquiera de ellas con hora después.
+  function parseFecha(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) {
+      if (isNaN(v)) return null;
+      return fechaISO(v.getFullYear(), v.getMonth() + 1, v.getDate());
+    }
+    if (typeof v === 'number') {
+      if (v > 20000 && v < 80000) return desdeSerial(Math.floor(v));
+      if (v > 19000101 && v < 21001231) return parseFecha(String(Math.floor(v)));
+      return null;
+    }
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+    if (m) return fechaValida(+m[1], +m[2], +m[3]) ? fechaISO(+m[1], +m[2], +m[3]) : null;
+    m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+    if (m) {
+      let d = +m[1], mo = +m[2], y = +m[3];
+      if (y < 100) y += 2000;
+      if (mo > 12 && d <= 12) { const t = d; d = mo; mo = t; } // venía como MM/DD
+      return fechaValida(y, mo, d) ? fechaISO(y, mo, d) : null;
+    }
+    m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m) return fechaValida(+m[1], +m[2], +m[3]) ? fechaISO(+m[1], +m[2], +m[3]) : null;
+    if (/^\d+(\.\d+)?$/.test(s)) return parseFecha(Number(s));
+    return null;
+  }
+
+  // Devuelve la hora (0–23) o null. Acepta fracción de día de Excel,
+  // fecha-hora de Excel, "14:35", "14:35:22", "2:35 p. m.", "143522" (SAP).
+  function parseHora(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) return isNaN(v) ? null : v.getHours();
+    if (typeof v === 'number') {
+      if (v >= 0 && v < 1) return Math.floor(v * 24 + 1e-9) % 24;
+      if (v > 20000) return Math.floor((v % 1) * 24 + 1e-9) % 24;
+      if (Number.isInteger(v) && v >= 0 && v <= 23) return v;
+      if (Number.isInteger(v) && v >= 10000 && v <= 235959) return Math.floor(v / 10000);
+      return null;
+    }
+    const s = String(v).trim().toLowerCase();
+    let m = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap])?\.?\s*m?/);
+    if (m) {
+      let h = +m[1];
+      if (m[3] === 'p' && h < 12) h += 12;
+      if (m[3] === 'a' && h === 12) h = 0;
+      return h <= 23 ? h : null;
+    }
+    m = s.match(/^(\d{2})(\d{2})(\d{2})$/);
+    if (m) return +m[1] <= 23 ? +m[1] : null;
+    if (/^\d{1,2}$/.test(s)) return +s <= 23 ? +s : null;
+    if (/^\d+(\.\d+)?$/.test(s)) return parseHora(Number(s));
+    return null;
+  }
+
+  function diaSemana(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  }
+  function sumarDias(iso, n) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + n));
+    return fechaISO(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+  // Jueves en que empieza la semana de esa fecha
+  function inicioSemana(iso) {
+    return sumarDias(iso, -((diaSemana(iso) - 4 + 7) % 7));
+  }
+  function fechaCorta(iso) {
+    const [, m, d] = iso.split('-');
+    return d + '/' + m;
+  }
+
+  // -------------------------------------------------------------- GIRHA
+
+  function normNomina(v) {
+    if (v == null) return '';
+    return String(v).trim().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
+  }
+
+  function normalizarClave(raw) {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase().replace(/\s+/g, '');
+    if (s === 'D') return { estado: 'D', texto: 'D' };
+    if (s === 'NP') return { estado: 'NP', texto: 'NP' };
+    const m = s.match(/^(\d{1,2})(?::(\d{2}))?-(\d{1,2})(?::(\d{2}))?$/);
+    if (m) {
+      const ini = +m[1] * 60 + +(m[2] || 0);
+      const fin = +m[3] * 60 + +(m[4] || 0);
+      if (+m[1] <= 24 && +m[3] <= 24 && fin > ini) {
+        return { estado: 'TRABAJA', ini, fin, texto: aHora(ini) + '-' + aHora(fin) };
+      }
+    }
+    return { estado: 'OTRO', texto: s || '(vacío)' };
+  }
+
+  // filas: arreglo de arreglos [empresa, nómina, fecha, clave]
+  function leerGirha(filas, catalogo) {
+    const cat = new Map(catalogo.map((p) => [normNomina(p.nomina), p]));
+    const registros = [];
+    const ignorados = new Set();
+    const avisos = [];
+    let invalidas = 0, otraEmpresa = 0;
+    filas.forEach((fila, i) => {
+      if (!fila || fila.every((c) => c === '' || c == null)) return;
+      const [emp, nom, fec, cla] = fila;
+      const fecha = parseFecha(fec);
+      if (!fecha) { if (i > 0) invalidas++; return; }
+      const n = normNomina(nom);
+      if (!n) { invalidas++; return; }
+      if (!cat.has(n)) { ignorados.add(n); return; }
+      if (emp && String(emp).trim().toUpperCase() !== 'NSD') otraEmpresa++;
+      registros.push({ nomina: n, fecha, clave: normalizarClave(cla), fila: i + 1 });
+    });
+    if (invalidas) avisos.push(invalidas + ' fila(s) sin fecha o nómina válida no se tomaron en cuenta.');
+    if (otraEmpresa) avisos.push(otraEmpresa + ' fila(s) con clave de empresa distinta a "NSD" (se usaron igual).');
+    const semanas = [...new Set(registros.map((r) => inicioSemana(r.fecha)))].sort();
+    return { registros, semanas, ignorados: ignorados.size, avisos };
+  }
+
+  function armarSemana(registros, inicio, catalogo) {
+    const fechas = DIAS.map((_, i) => sumarDias(inicio, i));
+    const idxFecha = new Map(fechas.map((f, i) => [f, i]));
+    const personas = {};
+    const avisos = [];
+    const vistos = {};
+    catalogo.forEach((p) => {
+      personas[normNomina(p.nomina)] = {
+        dias: fechas.map((f) => ({ fecha: f, estado: 'FALTA', texto: '—' })),
+      };
+    });
+    registros.forEach((r) => {
+      const i = idxFecha.get(r.fecha);
+      if (i == null || !personas[r.nomina]) return;
+      const k = r.nomina + '|' + r.fecha;
+      if (vistos[k]) avisos.push({ tipo: 'duplicado', nomina: r.nomina, texto: 'viene dos veces el ' + fechaCorta(r.fecha) + ' (se usó la fila ' + r.fila + ').' });
+      vistos[k] = true;
+      personas[r.nomina].dias[i] = Object.assign({ fecha: r.fecha }, r.clave);
+      if (r.clave.estado === 'OTRO') avisos.push({ tipo: 'clave', nomina: r.nomina, texto: 'clave "' + r.clave.texto + '" no reconocida el ' + fechaCorta(r.fecha) + '; se toma como no disponible.' });
+    });
+    Object.keys(personas).forEach((n) => {
+      const falt = personas[n].dias.filter((d) => d.estado === 'FALTA');
+      if (falt.length === 7) avisos.push({ tipo: 'ausente', nomina: n, texto: 'no aparece en el archivo esta semana.' });
+      else if (falt.length) avisos.push({ tipo: 'faltan', nomina: n, texto: 'le faltan ' + falt.length + ' día(s): ' + falt.map((d) => DIAS[idxFecha.get(d.fecha)].nombre + ' ' + fechaCorta(d.fecha)).join(', ') + '.' });
+    });
+    return { inicio, fechas, personas, avisos };
+  }
+
+  function disponible(semana, nomina, i) {
+    const p = semana.personas[nomina];
+    if (!p) return null;
+    const d = p.dias[i];
+    return d && d.estado === 'TRABAJA' ? d : null;
+  }
+
+  // ---------------------------------------------------------- ventas SAP
+
+  // filas: arreglo de arreglos (ya sin la fila de títulos)
+  // cols: { fecha, hora (-1 si la fecha trae la hora), ticket, importe (-1 si no hay) }
+  function procesarVentas(filas, cols) {
+    const tickets = new Map(); // clave ticket -> {fecha, hora, importe}
+    let descartadas = 0;
+    filas.forEach((f) => {
+      if (!f) return;
+      const fecha = parseFecha(f[cols.fecha]);
+      const hora = parseHora(cols.hora >= 0 ? f[cols.hora] : f[cols.fecha]);
+      const tk = f[cols.ticket] == null ? '' : String(f[cols.ticket]).trim();
+      if (!fecha || hora == null || !tk) { descartadas++; return; }
+      let imp = 0;
+      if (cols.importe >= 0) {
+        const v = f[cols.importe];
+        imp = typeof v === 'number' ? v : parseFloat(String(v).replace(/[$,\s]/g, '')) || 0;
+      }
+      // El ticket se cuenta una vez, en la fecha y hora de su primer renglón.
+      const k = fecha + '|' + tk;
+      const t = tickets.get(k);
+      if (t) t.importe += imp;
+      else tickets.set(k, { fecha, hora, importe: imp });
+    });
+    const tot = {}, imp = {}, fechasPorDia = {};
+    DIAS.forEach((d) => { tot[d.cod] = {}; imp[d.cod] = {}; fechasPorDia[d.cod] = new Set(); });
+    const fechas = new Set();
+    tickets.forEach((t) => {
+      const cod = COD_POR_DOW[diaSemana(t.fecha)];
+      fechas.add(t.fecha);
+      fechasPorDia[cod].add(t.fecha);
+      tot[cod][t.hora] = (tot[cod][t.hora] || 0) + 1;
+      imp[cod][t.hora] = (imp[cod][t.hora] || 0) + t.importe;
+    });
+    const tickets_ = {}, importe = {}, diasContados = {};
+    DIAS.forEach((d) => {
+      const n = fechasPorDia[d.cod].size;
+      diasContados[d.cod] = n;
+      tickets_[d.cod] = {};
+      importe[d.cod] = {};
+      for (let h = 0; h < 24; h++) {
+        tickets_[d.cod][h] = n ? (tot[d.cod][h] || 0) / n : 0;
+        importe[d.cod][h] = n ? (imp[d.cod][h] || 0) / n : 0;
+      }
+    });
+    const lista = [...fechas].sort();
+    return {
+      tickets: tickets_,
+      importe,
+      diasContados,
+      info: {
+        filas: filas.length,
+        descartadas,
+        ticketsUnicos: tickets.size,
+        desde: lista[0] || null,
+        hasta: lista[lista.length - 1] || null,
+        dias: lista.length,
+        semanas: new Set(lista.map(inicioSemana)).size,
+      },
+    };
+  }
+
+  function nivelCajas(tickets, capacidad) {
+    if (!tickets) return 1;
+    return Math.max(1, Math.min(3, Math.ceil(tickets / capacidad - 1e-9)));
+  }
+
+  // --------------------------------------------------- armado del rol
+
+  function horarioDia(config, i) {
+    const h = config.horario[DIAS[i].cod];
+    return { ab: aMin(h.ab), ci: aMin(h.ci) };
+  }
+
+  function statsVacios() {
+    return { dias: 0, horas: 0, cierres: 0, aperturas: 0, finde: 0, c1: 0, c2: 0, apoyos: 0 };
+  }
+
+  function numeroSemana(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return Math.floor(Date.UTC(y, m - 1, d) / (7 * 86400000));
+  }
+
+  function nombreDe(catalogo, nomina) {
+    const p = catalogo.find((x) => normNomina(x.nomina) === nomina);
+    return p ? p.nombre : 'Nómina ' + nomina;
+  }
+
+  // Busca la mejor forma de cubrir una caja un día, en tramos de min–max
+  // horas, sin repetir persona. Si no alcanza la gente, deja huecos.
+  function resolverCaja(ctx) {
+    const { ab, ci, cands, min, max, paso, costo, costoHueco } = ctx;
+    const LIMITE = 40000;
+    let nodos = 0;
+    let mejor = { cost: Infinity, segs: [] };
+    const usados = new Set();
+    const segs = [];
+
+    function dfs(t, cost) {
+      if (cost >= mejor.cost || ++nodos > LIMITE) return;
+      if (t >= ci) { mejor = { cost, segs: segs.slice() }; return; }
+      const opts = [];
+      cands.forEach((c) => {
+        if (usados.has(c.nomina) || c.ini > t || c.fin <= t) return;
+        const tope = Math.min(c.fin, ci, t + max);
+        for (let e = tope; e >= t + min; e -= paso) {
+          const resto = ci - e;
+          // un resto menor al mínimo ya no se puede cubrir con otro turno
+          const castigo = resto > 0 && resto < min ? costoHueco(resto) : 0;
+          opts.push({ c, e, orden: costo(c, t, e) + castigo, cost: costo(c, t, e) });
+        }
+      });
+      opts.sort((a, b) => a.orden - b.orden || (b.e - a.e));
+      for (const o of opts) {
+        usados.add(o.c.nomina);
+        segs.push({ nomina: o.c.nomina, ini: t, fin: o.e });
+        dfs(o.e, cost + o.cost);
+        segs.pop();
+        usados.delete(o.c.nomina);
+      }
+      // Hueco: nadie cubre desde t; se salta hasta que alguien pueda entrar.
+      let sig = ci;
+      cands.forEach((c) => { if (!usados.has(c.nomina) && c.ini > t && c.ini < sig) sig = c.ini; });
+      if (sig <= t) sig = Math.min(ci, t + paso);
+      dfs(sig, cost + costoHueco(sig - t));
+    }
+    dfs(ab, 0);
+    return mejor.segs;
+  }
+
+  function generarRol(opts) {
+    const { semana, catalogo, config } = opts;
+    const seleccion = new Set((opts.seleccion || []).map(normNomina));
+    const demanda = opts.demanda || null;
+    const min = config.turnoMin * 60, max = config.turnoMax * 60, paso = config.paso;
+    const elegidos = [...seleccion].filter((n) => semana.personas[n]).sort();
+    const semilla = numeroSemana(semana.inicio);
+    const rango = {};
+    elegidos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, elegidos.length); });
+    const stats = {};
+    catalogo.forEach((p) => { stats[normNomina(p.nomina)] = statsVacios(); });
+
+    const dias = DIAS.map((d, i) => {
+      const { ab, ci } = horarioDia(config, i);
+      return { idx: i, cod: d.cod, nombre: d.nombre, fecha: semana.fechas[i], ab, ci, turnos: [], apoyos: [] };
+    });
+
+    function candidatos(dia, ocupados) {
+      return elegidos.map((n) => {
+        const d = disponible(semana, n, dia.idx);
+        if (!d || ocupados.has(n) || stats[n].dias >= config.maxDias) return null;
+        const ini = Math.max(d.ini, dia.ab), fin = Math.min(d.fin, dia.ci);
+        return fin - ini >= min ? { nomina: n, ini, fin, girha: d } : null;
+      }).filter(Boolean);
+    }
+
+    // Días más apretados primero: poca gente disponible contra horas a cubrir.
+    function holgura(dia) {
+      let oferta = 0;
+      elegidos.forEach((n) => {
+        const d = disponible(semana, n, dia.idx);
+        if (d) oferta += Math.max(0, Math.min(d.fin, dia.ci) - Math.max(d.ini, dia.ab));
+      });
+      return oferta / Math.max(1, dia.ci - dia.ab);
+    }
+
+    function nivelDia(dia, desde, hasta) {
+      if (!demanda) return 2;
+      let m = 1;
+      for (let h = Math.floor(desde / 60); h * 60 < hasta; h++) {
+        m = Math.max(m, nivelCajas(demanda.tickets[dia.cod][h], config.capacidad));
+      }
+      return m;
+    }
+
+    const orden = dias.slice().sort((a, b) => holgura(a) - holgura(b) || a.idx - b.idx);
+    const pendientes = new Set(dias.map((d) => d.idx));
+
+    // Fase 1: Caja 1 todos los días (cajero fijo, lo más importante).
+    // Fase 2: Caja 2 con la gente que queda.
+    // Si hay ventas, la Caja 2 se cubre primero en los días con más horas cargadas.
+    // Sin ventas, primero sábado, domingo y viernes (los días de más venta en tienda).
+    const PRIORIDAD_SIN_VENTAS = { SAB: 3, DOM: 2, VIE: 1 };
+    function carga(dia) {
+      if (!demanda) return PRIORIDAD_SIN_VENTAS[dia.cod] || 0;
+      let k = 0;
+      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += nivelCajas(demanda.tickets[dia.cod][h], config.capacidad) - 1;
+      return k;
+    }
+    const ordenC2 = orden.slice().sort((a, b) => carga(b) - carga(a) || holgura(a) - holgura(b) || a.idx - b.idx);
+
+    [1, 2].forEach((caja) => {
+      const pend = new Set(pendientes);
+      (caja === 1 ? orden : ordenC2).forEach((dia) => {
+        pend.delete(dia.idx);
+        const ocupados = new Set(dia.turnos.map((t) => t.nomina));
+        const cands = candidatos(dia, ocupados);
+        const finde = FIN_DE_SEMANA.has(dia.cod);
+        const futuro = {};
+        cands.forEach((c) => {
+          futuro[c.nomina] = [...pend].filter((i) => disponible(semana, c.nomina, i)).length;
+        });
+        const costo = (c, ini, fin) => {
+          const s = stats[c.nomina];
+          let k = s.dias * 1000 + (s.horas / 60) * 15 + s['c' + caja] * 60 + rango[c.nomina];
+          if (fin === dia.ci) k += s.cierres * 250;
+          if (ini === dia.ab) k += s.aperturas * 120;
+          if (finde) k += s.finde * 250;
+          k += futuro[c.nomina] * 40; // usar antes a quien tiene menos días libres después
+          return k + 300; // cada relevo cuesta: se prefieren turnos largos
+        };
+        const pesoHueco = caja === 1 ? 300 : 200;
+        const costoHueco = (mins) => mins * pesoHueco;
+        const segs = resolverCaja({ ab: dia.ab, ci: dia.ci, cands, min, max, paso, costo, costoHueco });
+        segs.forEach((sg) => {
+          const s = stats[sg.nomina];
+          const c = cands.find((x) => x.nomina === sg.nomina);
+          const alternos = cands
+            .filter((x) => x.nomina !== sg.nomina && !segs.some((o) => o.nomina === x.nomina) && x.ini <= sg.ini && x.fin > sg.ini)
+            .map((x) => nombreDe(catalogo, x.nomina) + ' (' + stats[x.nomina].dias + '/' + config.maxDias + ')');
+          const razon = [
+            (caja === 1 ? 'Caja 1 – cajero fijo, no deja la caja.' : 'Caja 2 – cajero flotante: apoya en piso y regresa a cobrar cuando se junta fila.'),
+            dia.nombre + ' ' + rangoLargo(sg.ini, sg.fin) + ' (' + horasTxt(sg.fin - sg.ini) + ').',
+            'Su horario GIRHA ese día es ' + rangoLargo(c.girha.ini, c.girha.fin) + ': el turno queda dentro.',
+            'Al asignarlo llevaba ' + s.dias + ' de ' + config.maxDias + ' días en caja, ' + s.cierres + ' cierre(s) y ' + s.finde + ' fin(es) de semana.',
+            alternos.length
+              ? 'También podían entrar a esa hora: ' + alternos.join(', ') + '. Se eligió a quien llevaba menos días, cierres, fines de semana y horas.'
+              : 'Era la única persona marcada disponible para cubrir desde esa hora.',
+          ];
+          if (caja === 2 && demanda) {
+            const n = nivelDia(dia, sg.ini, sg.fin);
+            razon.push(n >= 2 ? 'Según ventas, en este horario hay horas en amarillo o rojo: la Caja 2 debe quedarse cobrando en esas horas.' : 'Según ventas, este horario es tranquilo (verde): la Caja 2 puede estar en piso y regresar si se junta fila.');
+          }
+          dia.turnos.push({ caja, nomina: sg.nomina, ini: sg.ini, fin: sg.fin, razon: razon.join('\n'), manual: false });
+          s.dias++;
+          s.horas += sg.fin - sg.ini;
+          s['c' + caja]++;
+          if (sg.fin === dia.ci) s.cierres++;
+          if (sg.ini === dia.ab) s.aperturas++;
+          if (finde) s.finde++;
+        });
+      });
+    });
+    dias.forEach((d) => d.turnos.sort((a, b) => a.caja - b.caja || a.ini - b.ini));
+    const rol = { semana: semana.inicio, generado: new Date().toISOString(), dias, conVentas: !!demanda, ordenConVentas: !!demanda };
+    rol.dias.forEach((d) => { d.apoyos = []; });
+    calcularApoyos(rol, { semana, catalogo, config, demanda });
+    return rol;
+  }
+
+  // ------------------------------------------------------------ Caja 3
+
+  function horasPico(dia, demanda, config) {
+    const bloques = [];
+    if (!demanda) return bloques;
+    let actual = null;
+    for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) {
+      const t = demanda.tickets[dia.cod][h] || 0;
+      if (nivelCajas(t, config.capacidad) === 3) {
+        const ini = Math.max(h * 60, dia.ab), fin = Math.min((h + 1) * 60, dia.ci);
+        if (actual && actual.fin === ini) { actual.fin = fin; actual.tickets.push(t); }
+        else { actual = { ini, fin, tickets: [t] }; bloques.push(actual); }
+      } else actual = null;
+    }
+    return bloques;
+  }
+
+  function enCaja(dia, nomina, ini, fin) {
+    return dia.turnos.some((t) => t.nomina === nomina && t.ini < fin && t.fin > ini);
+  }
+
+  function enPiso(semana, dia, nomina, ini, fin) {
+    const d = disponible(semana, nomina, dia.idx);
+    return !!d && d.ini <= ini && d.fin >= fin && !enCaja(dia, nomina, ini, fin);
+  }
+
+  // Recalcula solo los apoyos de Caja 3; no toca Caja 1 ni Caja 2.
+  function calcularApoyos(rol, opts) {
+    const { semana, catalogo, config, demanda } = opts;
+    rol.conVentas = !!demanda;
+    const todos = catalogo.map((p) => normNomina(p.nomina)).sort();
+    const semilla = numeroSemana(semana.inicio);
+    const rango = {};
+    todos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, todos.length); });
+    const apoyos = {}, horasCaja = {};
+    todos.forEach((n) => { apoyos[n] = 0; horasCaja[n] = 0; });
+    rol.dias.forEach((d) => d.turnos.forEach((t) => { horasCaja[t.nomina] = (horasCaja[t.nomina] || 0) + t.fin - t.ini; }));
+
+    rol.dias.forEach((dia) => {
+      dia.apoyos = [];
+      horasPico(dia, demanda, config).forEach((b) => {
+        const prom = Math.round(b.tickets.reduce((a, x) => a + x, 0) / b.tickets.length);
+        // Intenta con alguien que cubra todo el pico; si no, hora por hora.
+        let tramos = [{ ini: b.ini, fin: b.fin }];
+        if (!todos.some((n) => enPiso(semana, dia, n, b.ini, b.fin))) {
+          tramos = [];
+          for (let t = b.ini; t < b.fin; t += 60) tramos.push({ ini: t, fin: Math.min(t + 60, b.fin) });
+        }
+        tramos.forEach((tr) => {
+          const cands = todos.filter((n) => enPiso(semana, dia, n, tr.ini, tr.fin));
+          cands.sort((a, c) => apoyos[a] - apoyos[c] || horasCaja[a] - horasCaja[c] || rango[a] - rango[c]);
+          const elegido = cands[0] || null;
+          const base = 'Hora pico ' + dia.nombre + ' ' + rangoLargo(tr.ini, tr.fin) + ': promedio de ' + prom + ' tickets por hora; con ' + config.capacidad + ' tickets por caja se necesitan 3 cajas.';
+          let razon;
+          if (elegido) {
+            const d = disponible(semana, elegido, dia.idx);
+            razon = [
+              base,
+              nombreDe(catalogo, elegido) + ' está en piso a esa hora según GIRHA (' + rangoLargo(d.ini, d.fin) + ') y no está en Caja 1 ni Caja 2.',
+              'Llevaba ' + apoyos[elegido] + ' apoyo(s) en Caja 3 esta semana; se rota a quien lleva menos.',
+              cands.length > 1 ? 'También podrían apoyar: ' + cands.slice(1, 6).map((n) => nombreDe(catalogo, n)).join(', ') + '.' : 'Era la única persona en piso a esa hora.',
+              'El apoyo en Caja 3 no cuenta dentro de sus 3 días de caja.',
+            ].join('\n');
+            apoyos[elegido]++;
+          } else {
+            razon = base + '\nNo hay ningún vendedor en piso a esa hora según GIRHA (todos están en caja, en descanso o fuera de horario).';
+          }
+          dia.apoyos.push({ ini: tr.ini, fin: tr.fin, nomina: elegido, tickets: prom, razon, manual: false });
+        });
+      });
+    });
+    return rol;
+  }
+
+  // ------------------------------------------------------------ validación
+
+  function libres(ab, ci, turnos) {
+    const out = [];
+    let t = ab;
+    turnos.slice().sort((a, b) => a.ini - b.ini).forEach((x) => {
+      if (x.ini > t) out.push({ ini: t, fin: Math.min(x.ini, ci) });
+      t = Math.max(t, x.fin);
+    });
+    if (t < ci) out.push({ ini: t, fin: ci });
+    return out.filter((g) => g.fin > g.ini);
+  }
+
+  function validarRol(rol, opts) {
+    const { semana, catalogo, config } = opts;
+    const seleccion = new Set((opts.seleccion || []).map(normNomina));
+    const problemas = [];
+    const huecos = [];
+    const min = config.turnoMin * 60, max = config.turnoMax * 60;
+    const resumen = {};
+    const r = (n) => (resumen[n] = resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, cierres: 0, finde: 0 });
+    const nom = (n) => nombreDe(catalogo, n);
+
+    rol.dias.forEach((dia) => {
+      const porPersona = {};
+      dia.turnos.forEach((t) => {
+        (porPersona[t.nomina] = porPersona[t.nomina] || []).push(t);
+        const d = semana.personas[t.nomina] ? semana.personas[t.nomina].dias[dia.idx] : null;
+        const q = (texto) => problemas.push({ dia: dia.idx, nomina: t.nomina, texto: dia.nombre + ' · ' + nom(t.nomina) + ' (C' + t.caja + ' ' + rangoLargo(t.ini, t.fin) + '): ' + texto });
+        if (!d || d.estado !== 'TRABAJA') q('ese día no trabaja según GIRHA (' + (d ? d.texto : 'sin horario') + ').');
+        else if (t.ini < d.ini || t.fin > d.fin) q('el turno sale de su horario GIRHA (' + rangoLargo(d.ini, d.fin) + ').');
+        const dur = t.fin - t.ini;
+        if (dur < min) q('dura ' + horasTxt(dur) + ', menos del mínimo de ' + config.turnoMin + ' h.');
+        if (dur > max) q('dura ' + horasTxt(dur) + ', más del máximo de ' + config.turnoMax + ' h.');
+        if (t.ini < dia.ab || t.fin > dia.ci) q('sale del horario de la tienda (' + rangoLargo(dia.ab, dia.ci) + ').');
+        const s = r(t.nomina);
+        s.horas += dur;
+        s['c' + t.caja]++;
+        if (t.fin === dia.ci) s.cierres++;
+        if (FIN_DE_SEMANA.has(dia.cod)) s.finde++;
+      });
+      Object.keys(porPersona).forEach((n) => {
+        r(n).dias++;
+        if (porPersona[n].length > 1) problemas.push({ dia: dia.idx, nomina: n, texto: dia.nombre + ' · ' + nom(n) + ' tiene ' + porPersona[n].length + ' turnos de caja; solo se permite 1 por día.' });
+      });
+      [1, 2].forEach((caja) => {
+        const ts = dia.turnos.filter((t) => t.caja === caja).sort((a, b) => a.ini - b.ini);
+        for (let i = 1; i < ts.length; i++) {
+          if (ts[i].ini < ts[i - 1].fin) problemas.push({ dia: dia.idx, texto: dia.nombre + ' · Caja ' + caja + ': ' + nom(ts[i - 1].nomina) + ' y ' + nom(ts[i].nomina) + ' se enciman de ' + aHora(ts[i].ini) + ' a ' + aHora(Math.min(ts[i].fin, ts[i - 1].fin)) + '.' });
+        }
+        libres(dia.ab, dia.ci, ts).forEach((g) => {
+          const sug = catalogo.map((p) => normNomina(p.nomina)).filter((n) => {
+            const d = disponible(semana, n, dia.idx);
+            return d && d.ini < g.fin && d.fin > g.ini && !porPersona[n];
+          }).map((n) => {
+            const d = disponible(semana, n, dia.idx);
+            const usa = rol.dias.filter((x) => x.turnos.some((t) => t.nomina === n)).length;
+            return { nomina: n, completo: d.ini <= g.ini && d.fin >= g.fin, marcado: seleccion.has(n), dias: usa, girha: d.texto };
+          }).filter((s) => s.dias < config.maxDias)
+            .sort((a, b) => (b.completo - a.completo) || (a.dias - b.dias));
+          huecos.push({ dia: dia.idx, caja, ini: g.ini, fin: g.fin, sugerencias: sug });
+        });
+      });
+      dia.apoyos.forEach((a) => {
+        if (!a.nomina) return;
+        r(a.nomina).apoyos++;
+        const d = disponible(semana, a.nomina, dia.idx);
+        if (!d || d.ini > a.ini || d.fin < a.fin) problemas.push({ dia: dia.idx, nomina: a.nomina, texto: dia.nombre + ' · Apoyo Caja 3 ' + rangoLargo(a.ini, a.fin) + ': ' + nom(a.nomina) + ' no está en piso a esa hora según GIRHA.' });
+        else if (enCaja(dia, a.nomina, a.ini, a.fin)) problemas.push({ dia: dia.idx, nomina: a.nomina, texto: dia.nombre + ' · Apoyo Caja 3 ' + rangoLargo(a.ini, a.fin) + ': ' + nom(a.nomina) + ' ya está en Caja 1 o Caja 2 a esa hora.' });
+      });
+    });
+    Object.keys(resumen).forEach((n) => {
+      if (resumen[n].dias > config.maxDias) problemas.push({ nomina: n, texto: nom(n) + ' tiene ' + resumen[n].dias + ' días en Caja 1/Caja 2; el máximo es ' + config.maxDias + '.' });
+    });
+    huecos.forEach((h) => {
+      const dia = rol.dias[h.dia];
+      problemas.push({ dia: h.dia, hueco: true, texto: dia.nombre + ' · Caja ' + h.caja + ' sin cubrir de ' + aHora(h.ini) + ' a ' + aHora(h.fin) + ': quedan menos de 2 cajas abiertas.' });
+    });
+    const sinApoyo = [];
+    rol.dias.forEach((d) => d.apoyos.forEach((a) => { if (!a.nomina) sinApoyo.push({ dia: d.idx, ini: a.ini, fin: a.fin }); }));
+    sinApoyo.forEach((a) => problemas.push({ dia: a.dia, texto: rol.dias[a.dia].nombre + ' · Hora pico ' + rangoLargo(a.ini, a.fin) + ': no hay vendedor en piso para abrir Caja 3.' }));
+    return { problemas, huecos, resumen, sinApoyo };
+  }
+
+  // Cuántos turnos se necesitan contra cuántos alcanzan con la gente marcada.
+  function capacidadSemana(semana, seleccion, config) {
+    let necesarios = 0;
+    DIAS.forEach((_, i) => {
+      const { ab, ci } = horarioDia(config, i);
+      necesarios += 2 * Math.ceil((ci - ab) / (config.turnoMax * 60));
+    });
+    let posibles = 0;
+    (seleccion || []).map(normNomina).forEach((n) => {
+      if (!semana.personas[n]) return;
+      const dias = semana.personas[n].dias.filter((d) => d.estado === 'TRABAJA').length;
+      posibles += Math.min(config.maxDias, dias);
+    });
+    return { necesarios, posibles, alcanza: posibles >= necesarios };
+  }
+
+  return {
+    DIAS, FIN_DE_SEMANA, COLORES,
+    configInicial, aMin, aHora, corta, rangoCorto, rangoLargo, horasTxt,
+    parseFecha, parseHora, diaSemana, sumarDias, inicioSemana, fechaCorta,
+    normNomina, normalizarClave, leerGirha, armarSemana, disponible,
+    procesarVentas, nivelCajas, horasPico,
+    generarRol, calcularApoyos, validarRol, capacidadSemana, nombreDe, enPiso,
+  };
+});
