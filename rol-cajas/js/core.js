@@ -40,7 +40,11 @@
         MAR: { ab: '08:00', ci: '21:00' },
         MIE: { ab: '08:00', ci: '21:00' },
       },
-      capacidad: 30, // tickets por hora que atiende una caja
+      // Tickets por hora que atiende una caja SIN que se haga fila. En ráfaga una caja cobra más
+      // (unos 40 por hora), pero los clientes llegan en grupos: en el histórico de Ferre Mina
+      // la tienda ya abre la segunda caja en más de la mitad de las horas con 15 a 20 tickets.
+      capacidad: 20,
+      version: 2,
       maxDias: 3, // días máximos en Caja 1 / Caja 2 por vendedor
       turnoMin: 3, // horas
       turnoMax: 6, // horas
@@ -285,27 +289,38 @@
     const tot = {}, imp = {}, fechasPorDia = {};
     DIAS.forEach((d) => { tot[d.cod] = {}; imp[d.cod] = {}; fechasPorDia[d.cod] = new Set(); });
     const fechas = new Set();
+    const porFecha = {}; // fecha -> { hora: tickets }
     tickets.forEach((t) => {
       const cod = COD_POR_DOW[diaSemana(t.fecha)];
+      if (!porFecha[t.fecha]) porFecha[t.fecha] = {};
+      porFecha[t.fecha][t.hora] = (porFecha[t.fecha][t.hora] || 0) + 1;
       fechas.add(t.fecha);
       fechasPorDia[cod].add(t.fecha);
       tot[cod][t.hora] = (tot[cod][t.hora] || 0) + 1;
       imp[cod][t.hora] = (imp[cod][t.hora] || 0) + t.importe;
     });
-    const tickets_ = {}, importe = {}, diasContados = {};
+    // "alto" = tickets de un día cargado: 8 de cada 10 días de ese día de la semana
+    // vendieron eso o menos en esa hora. Con ese número se decide cuántas cajas abrir,
+    // porque planear con el promedio deja corta a la tienda la mitad de los días.
+    const tickets_ = {}, importe = {}, diasContados = {}, alto = {};
     DIAS.forEach((d) => {
-      const n = fechasPorDia[d.cod].size;
+      const lista = [...fechasPorDia[d.cod]];
+      const n = lista.length;
       diasContados[d.cod] = n;
       tickets_[d.cod] = {};
       importe[d.cod] = {};
+      alto[d.cod] = {};
       for (let h = 0; h < 24; h++) {
         tickets_[d.cod][h] = n ? (tot[d.cod][h] || 0) / n : 0;
         importe[d.cod][h] = n ? (imp[d.cod][h] || 0) / n : 0;
+        const v = lista.map((f) => porFecha[f][h] || 0).sort((a, b) => a - b);
+        alto[d.cod][h] = n ? v[Math.floor(0.8 * (n - 1))] : 0;
       }
     });
     const lista = [...fechas].sort();
     return {
       tickets: tickets_,
+      alto,
       importe,
       diasContados,
       info: {
@@ -318,6 +333,14 @@
         semanas: new Set(lista.map(inicioSemana)).size,
       },
     };
+  }
+
+  // Tickets por hora con los que se decide cuántas cajas abrir: los de un día cargado.
+  // Si el reporte es de una versión anterior y no los trae, se usa el promedio.
+  function cargaHora(demanda, cod, h) {
+    if (!demanda) return 0;
+    const t = demanda.alto && demanda.alto[cod] ? demanda.alto[cod][h] : demanda.tickets[cod][h];
+    return t || 0;
   }
 
   function nivelCajas(tickets, capacidad) {
@@ -428,7 +451,7 @@
       if (!demanda) return 2;
       let m = 1;
       for (let h = Math.floor(desde / 60); h * 60 < hasta; h++) {
-        m = Math.max(m, nivelCajas(demanda.tickets[dia.cod][h], config.capacidad));
+        m = Math.max(m, nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad));
       }
       return m;
     }
@@ -444,7 +467,7 @@
     function carga(dia) {
       if (!demanda) return PRIORIDAD_SIN_VENTAS[dia.cod] || 0;
       let k = 0;
-      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += nivelCajas(demanda.tickets[dia.cod][h], config.capacidad) - 1;
+      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad) - 1;
       return k;
     }
     const ordenC2 = orden.slice().sort((a, b) => carga(b) - carga(a) || holgura(a) - holgura(b) || a.idx - b.idx);
@@ -515,7 +538,7 @@
     if (!demanda) return bloques;
     let actual = null;
     for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) {
-      const t = demanda.tickets[dia.cod][h] || 0;
+      const t = cargaHora(demanda, dia.cod, h);
       if (nivelCajas(t, config.capacidad) === 3) {
         const ini = Math.max(h * 60, dia.ab), fin = Math.min((h + 1) * 60, dia.ci);
         if (actual && actual.fin === ini) { actual.fin = fin; actual.tickets.push(t); }
@@ -560,7 +583,7 @@
           const cands = todos.filter((n) => enPiso(semana, dia, n, tr.ini, tr.fin));
           cands.sort((a, c) => apoyos[a] - apoyos[c] || horasCaja[a] - horasCaja[c] || rango[a] - rango[c]);
           const elegido = cands[0] || null;
-          const base = 'Hora pico ' + dia.nombre + ' ' + rangoLargo(tr.ini, tr.fin) + ': promedio de ' + prom + ' tickets por hora; con ' + config.capacidad + ' tickets por caja se necesitan 3 cajas.';
+          const base = 'Hora pico ' + dia.nombre + ' ' + rangoLargo(tr.ini, tr.fin) + ': en un día cargado se cobran ' + prom + ' tickets por hora; con ' + config.capacidad + ' tickets por caja se necesitan 3 cajas.';
           let razon;
           if (elegido) {
             const d = disponible(semana, elegido, dia.idx);
@@ -687,7 +710,7 @@
     configInicial, aMin, aHora, corta, rangoCorto, rangoLargo, horasTxt,
     parseFecha, parseHora, diaSemana, sumarDias, inicioSemana, fechaCorta,
     normNomina, normalizarClave, leerGirha, armarSemana, disponible,
-    procesarVentas, nivelCajas, horasPico,
+    procesarVentas, cargaHora, nivelCajas, horasPico,
     generarRol, calcularApoyos, validarRol, capacidadSemana, nombreDe, enPiso,
   };
 });

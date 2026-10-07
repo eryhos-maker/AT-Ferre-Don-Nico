@@ -5,7 +5,8 @@
  *
  * El reporte de SAP viene separado por ";" con las columnas:
  *   # ; U_SO1_FECHA ; U_SO1_HORACADENA ; Name (ticket) ; U_SO1_TOTALNETO ; U_SO1_ESTACION
- * Solo se guardan PROMEDIOS de tickets por día de la semana y hora (no el detalle de tickets).
+ * Solo se guardan, por día de la semana y hora, el PROMEDIO de tickets y los tickets de un
+ * día cargado (8 de cada 10 días venden eso o menos). No se guarda el detalle de tickets.
  * Los pesos no se guardan salvo que se pida con --con-importe, porque la app es pública.
  */
 const fs = require('fs');

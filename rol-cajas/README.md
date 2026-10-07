@@ -33,7 +33,12 @@ Funciona en el navegador, en computadora o celular. **Tus archivos no salen de t
 ### 4 · Ventas (opcional)
 - **No tienes que subir nada.** La app usa el histórico incluido: 101,405 tickets del 1 de septiembre de 2025 al 31 de agosto de 2026, promediados por día de la semana y hora.
 - Si quieres usar ventas más recientes, sube el reporte de SAP. La app adivina las columnas; revisa que **Fecha, Hora, Ticket e Importe** sean correctas y presiona **📈 Calcular**. Con **↩️ Volver al histórico incluido** regresas al año guardado.
-- El histórico guarda solo el **promedio de tickets** por hora; no guarda pesos ni el detalle de cada ticket.
+- El histórico guarda solo tickets por día de la semana y hora (promedio y día cargado); no guarda pesos ni el detalle de cada ticket.
+
+**Cómo decide cuántas cajas**
+- Toma los tickets de un **día cargado**: 8 de cada 10 días se cobra eso o menos en esa hora. No usa el promedio, porque con el promedio la tienda queda corta la mitad de los días.
+- Divide entre lo que atiende una caja **sin que se haga fila**: 20 tickets por hora (se cambia en Parámetros). Cobrando sin parar una caja saca unos 40, pero los clientes llegan en grupos; en el año de historia la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets.
+- Resultado con el histórico: entre semana y sábado, una caja de 8 a 10 y dos cajas casi todas las horas de 10 a 20; domingo, dos cajas desde las 9 y tres de 11 a 17.
 - Si el archivo trae una fila por artículo, la app cuenta **tickets únicos**, no filas.
 - Verás un **mapa de calor** por día y hora:
   - 🟩 **1 caja**: con Caja 1 basta; Caja 2 puede estar en piso.
@@ -42,7 +47,7 @@ Funciona en el navegador, en computadora o celular. **Tus archivos no salen de t
 - ¿Ya tenías el rol hecho? Presiona **🔁 Actualizar apoyos Caja 3**. **Caja 1 y Caja 2 no cambian.**
 
 ### 5 · Parámetros
-Horario de la tienda por día, capacidad por caja (30 tickets/hora), máximo de días en caja (3), turno mínimo y máximo (3 y 6 h) y bloques de media hora u hora completa. Si cambias algo, vuelve a generar el rol.
+Horario de la tienda por día, capacidad por caja (20 tickets por hora sin fila), máximo de días en caja (3), turno mínimo y máximo (3 y 6 h) y bloques de media hora u hora completa. Si cambias algo, vuelve a generar el rol.
 
 ### 6 · Rol
 - Formato igual al de Excel: **ROL DE CAJAS MINA**, vendedores en filas, **jueves a miércoles** en columnas, color por persona y etiqueta **C1 / C2**.
