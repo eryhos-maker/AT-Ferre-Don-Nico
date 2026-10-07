@@ -54,9 +54,9 @@
     <!-- 4. Ventas -->
     <section id="tab-ventas" class="tab" hidden>
       <h2>4 · Ventas por hora (SAP) <span class="opcional">opcional</span></h2>
-      <p class="ayuda">Con este reporte la app calcula cuántas cajas necesitas cada hora y cuándo abrir la Caja 3. <b>Puedes armar el rol sin él</b>: cuando lo tengas, súbelo y presiona <b>Actualizar apoyos Caja 3</b>. Tus turnos de Caja 1 y Caja 2 no cambian.</p>
+      <p class="ayuda">Con las ventas por hora la app calcula cuántas cajas necesitas y cuándo abrir la Caja 3. <b>La app ya trae un año de historia de Ferre Mina</b>, así que este paso es opcional: sube un reporte solo si quieres usar ventas más recientes.</p>
       <div class="acciones">
-        <label class="btn pri">📂 Subir reporte de ventas<input type="file" id="in-sap" accept=".xlsx,.xls,.csv" hidden></label>
+        <label class="btn pri">📂 Subir reporte más reciente<input type="file" id="in-sap" accept=".xlsx,.xls,.csv" hidden></label>
       </div>
       <div id="ventas-cuerpo"></div>
     </section>
@@ -96,6 +96,7 @@
 
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="js/core.js"></script>
+  <script src="js/historico.js"></script>
   <script src="js/excel.js"></script>
   <script src="js/app.js"></script>
 </body>

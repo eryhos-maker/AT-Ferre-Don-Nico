@@ -3,7 +3,7 @@
 App para armar el **rol de cajas** de Ferre Mina de forma automática, a partir de:
 
 - los **horarios de GIRHA** (obligatorio), y
-- las **ventas por hora de SAP** (opcional; se puede subir días después).
+- las **ventas por hora de SAP**. **La app ya trae un año de historia** (septiembre 2025 a agosto 2026), así que no hay que subir nada; solo si quieres usar ventas más recientes.
 
 Funciona en el navegador, en computadora o celular. **Tus archivos no salen de tu computadora**: no hay servidor ni base de datos.
 
@@ -31,7 +31,9 @@ Funciona en el navegador, en computadora o celular. **Tus archivos no salen de t
 - Presiona **⚙️ Generar rol**.
 
 ### 4 · Ventas (opcional)
-- Sube el reporte de SAP. La app adivina las columnas; revisa que **Fecha, Hora, Ticket e Importe** sean correctas y presiona **📈 Calcular**.
+- **No tienes que subir nada.** La app usa el histórico incluido: 101,405 tickets del 1 de septiembre de 2025 al 31 de agosto de 2026, promediados por día de la semana y hora.
+- Si quieres usar ventas más recientes, sube el reporte de SAP. La app adivina las columnas; revisa que **Fecha, Hora, Ticket e Importe** sean correctas y presiona **📈 Calcular**. Con **↩️ Volver al histórico incluido** regresas al año guardado.
+- El histórico guarda solo el **promedio de tickets** por hora; no guarda pesos ni el detalle de cada ticket.
 - Si el archivo trae una fila por artículo, la app cuenta **tickets únicos**, no filas.
 - Verás un **mapa de calor** por día y hora:
   - 🟩 **1 caja**: con Caja 1 basta; Caja 2 puede estar en piso.
@@ -107,4 +109,5 @@ Si la app ya está publicada, usa el botón **🧪 Probar con datos de ejemplo**
 - `vendor/xlsx.full.min.js`: SheetJS 0.18.5, incluido para que funcione sin internet.
 - Pruebas de reglas: `cd rol-cajas && node --test tests/*.test.js`.
 - Regenerar ejemplos: `node ejemplos/generar-ejemplos.js`.
+- Actualizar el histórico incluido (`js/historico.js`) con un reporte nuevo de SAP: `node datos/generar-historico.js reporte.txt "Histórico Ferre Mina ..."`. El reporte original no se sube al repositorio.
 - Guardar el trabajo: el navegador recuerda lo último como comodidad. Lo oficial es el **catálogo JSON** y el **Excel** exportado.

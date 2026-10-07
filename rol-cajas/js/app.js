@@ -31,6 +31,13 @@
   let G = null; // resultado de leer GIRHA con el catálogo actual
   let SEM = null; // semana armada
   let sapTmp = null; // archivo de ventas en espera de elegir columnas
+  // Histórico de ventas por hora que ya viene con la app (js/historico.js).
+  const HIST = (typeof window !== 'undefined' && window.HISTORICO_VENTAS) || null;
+  // Si no hay un reporte subido a mano, se usa el histórico. Siempre se toma la versión incluida más reciente.
+  function ventasPorDefecto() {
+    if (HIST && (!S.ventas || S.ventas.historico)) S.ventas = { nombre: HIST.nombre, demanda: HIST.demanda, historico: true };
+  }
+  const conPesos = (dem) => !!dem && !dem.sinImporte;
 
   function guardar() {
     try { localStorage.setItem(CLAVE, JSON.stringify(S)); } catch (e) { /* sin almacenamiento: no pasa nada */ }
@@ -296,18 +303,19 @@
       cuerpo.innerHTML = h;
       return;
     }
+    if (S.ventas && S.ventas.historico) h += '<div class="caja-aviso info"><b>Ya no necesitas subir ventas.</b> La app trae el histórico de un año de Ferre Mina y con él calcula las cajas por hora. Solo sube un reporte si quieres usar ventas más recientes.</div>';
     if (!S.ventas) {
       cuerpo.innerHTML = '<div class="caja-aviso info">Aún no hay reporte de ventas. No pasa nada: el rol de Caja 1 y Caja 2 se arma igual. Solo faltarán el mapa de calor y los apoyos de Caja 3.</div>';
       return;
     }
     const i = S.ventas.demanda.info;
-    h += '<div class="chips"><span class="chip">Archivo: <b>' + esc(S.ventas.nombre) + '</b></span>' +
+    h += '<div class="chips"><span class="chip">' + (S.ventas.historico ? 'Histórico incluido' : 'Archivo') + ': <b>' + esc(S.ventas.nombre) + '</b></span>' +
       '<span class="chip"><b>' + i.ticketsUnicos.toLocaleString('es-MX') + '</b> tickets únicos</span>' +
       '<span class="chip">del <b>' + C.fechaCorta(i.desde) + '</b> al <b>' + C.fechaCorta(i.hasta) + '</b> (' + i.semanas + ' semanas)</span>' +
       (i.descartadas ? '<span class="chip">' + i.descartadas + ' renglones sin fecha/hora/ticket (ignorados)</span>' : '') + '</div>';
     h += mapaCalor();
     h += '<div class="acciones" style="margin-top:14px">' + (rolVigente() ? '<button class="btn pri" type="button" id="btn-apoyos2">🔁 Actualizar apoyos Caja 3 en el rol</button>' : '') +
-      '<button class="btn" type="button" id="btn-sap-quitar">🗑️ Quitar reporte de ventas</button></div>';
+      (S.ventas.historico ? '' : '<button class="btn" type="button" id="btn-sap-quitar">' + (HIST ? '↩️ Volver al histórico incluido' : '🗑️ Quitar reporte de ventas') + '</button>') + '</div>';
     cuerpo.innerHTML = h;
   }
 
@@ -329,7 +337,7 @@
         const pesos = d.importe[dia.cod][x] || 0;
         if (!abierta) { h += '<td class="n0">–</td>'; continue; }
         const n = C.nivelCajas(t, cap);
-        h += '<td class="n' + n + '" title="' + dia.nombre + ' ' + x + ':00 · ' + t.toFixed(1) + ' tickets · $' + Math.round(pesos).toLocaleString('es-MX') + ' promedio">' + Math.round(t) + '<small>$' + (pesos >= 1000 ? (pesos / 1000).toFixed(1) + 'k' : Math.round(pesos)) + '</small></td>';
+        h += '<td class="n' + n + '" title="' + dia.nombre + ' ' + x + ':00 · ' + t.toFixed(1) + ' tickets' + (conPesos(d) ? ' · $' + Math.round(pesos).toLocaleString('es-MX') : '') + ' promedio">' + Math.round(t) + (conPesos(d) ? '<small>$' + (pesos >= 1000 ? (pesos / 1000).toFixed(1) + 'k' : Math.round(pesos)) + '</small>' : '') + '</td>';
       }
       h += '</tr>';
     });
@@ -572,7 +580,7 @@
       const c3 = quienesEn(d.apoyos, a, b);
       const cub = (lista) => { let t = a; lista.slice().sort((x, y) => x.ini - y.ini).forEach((x) => { if (x.ini <= t) t = Math.max(t, x.fin); }); return t >= b; };
       h += '<tr><td class="h">' + C.aHora(a) + '–' + C.aHora(b) + '</td>';
-      h += '<td>' + (dem ? '<span class="quien n' + n + '">' + n + ' caja' + (n > 1 ? 's' : '') + '</span><span class="nota">' + Math.round(tk) + ' tickets · $' + Math.round(dem.importe[d.cod][h0 / 60] || 0).toLocaleString('es-MX') + '</span>' : '<span class="nota">sin reporte</span>') + '</td>';
+      h += '<td>' + (dem ? '<span class="quien n' + n + '">' + n + ' caja' + (n > 1 ? 's' : '') + '</span><span class="nota">' + Math.round(tk) + ' tickets' + (conPesos(dem) ? ' · $' + Math.round(dem.importe[d.cod][h0 / 60] || 0).toLocaleString('es-MX') : '') + '</span>' : '<span class="nota">sin reporte</span>') + '</td>';
       h += '<td>' + (c1.map((t) => chip(t, detalle(t, a, b))).join('') || '') + (cub(c1) ? '' : ' <span class="falta">FALTA</span>') + '</td>';
       h += '<td>' + (c2.map((t) => chip(t, detalle(t, a, b))).join('') || '') + (cub(c2) ? '' : ' <span class="falta">FALTA</span>') +
         (dem && c2.length ? '<span class="nota">' + (n >= 2 ? 'se queda cobrando' : 'puede estar en piso') + '</span>' : '') + '</td>';
@@ -641,7 +649,7 @@
         const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
         const nm = (l) => quienesEn(l, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ') || 'FALTA';
         const tk = dem ? dem.tickets[d.cod][h0 / 60] || 0 : '';
-        porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad) : '', dem ? Math.round(tk * 10) / 10 : '', dem ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
+        porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad) : '', dem ? Math.round(tk * 10) / 10 : '', conPesos(dem) ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
           nm(d.turnos.filter((t) => t.caja === 1)), nm(d.turnos.filter((t) => t.caja === 2)), quienesEn(d.apoyos, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ')]);
       }
     });
@@ -709,8 +717,9 @@
       case 'btn-imprimir': return imprimir();
       case 'btn-sap-cancel': sapTmp = null; return pintar();
       case 'btn-sap-quitar':
-        if (!confirm('¿Quitar el reporte de ventas? Los apoyos de Caja 3 del rol también se quitan.')) return;
+        if (!confirm(HIST ? '¿Volver al histórico incluido? Los apoyos de Caja 3 del rol se recalculan con el histórico.' : '¿Quitar el reporte de ventas? Los apoyos de Caja 3 del rol también se quitan.')) return;
         S.ventas = null;
+        ventasPorDefecto();
         if (rolVigente()) C.calcularApoyos(rolVigente(), opts());
         guardar(); return pintar();
       case 'btn-sap-calc': {
@@ -790,6 +799,7 @@
 
   // ------------------------------------------------------------ inicio
   cargar();
+  ventasPorDefecto();
   recalcularSemana();
   pintar();
 })();
