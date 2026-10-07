@@ -273,3 +273,37 @@ test('sin reporte de ventas y sin gente suficiente: la Caja 2 se cubre primero e
   assert.ok(!v.huecos.some((x) => x.dia === 2 && x.caja === 2), 'el sábado tiene Caja 2 completa');
   assert.ok(!v.huecos.some((x) => x.caja === 1), 'la Caja 1 siempre queda cubierta');
 });
+
+// ---------------------------------------------------- histórico incluido
+test('lee fechas con mes en letras, como salen del reporte de SAP', () => {
+  assert.equal(C.parseFecha('1 sep 2025 0:00:00.0'), '2025-09-01');
+  assert.equal(C.parseFecha('31 ago 2026 0:00:00.0'), '2026-08-31');
+  assert.equal(C.parseFecha('15-dic-2025'), '2025-12-15');
+  assert.equal(C.parseFecha('31 feb 2026'), null);
+  assert.equal(C.parseHora('01:04PM'), 13);
+  assert.equal(C.parseHora('12:41PM'), 12);
+});
+
+test('el histórico incluido tiene la forma que usa la app y marca el domingo como día pico', () => {
+  require('../js/historico.js');
+  const H = globalThis.HISTORICO_VENTAS;
+  assert.ok(H && H.nombre && H.demanda);
+  const d = H.demanda;
+  C.DIAS.forEach((dia) => {
+    for (let h = 0; h < 24; h++) {
+      assert.equal(typeof d.tickets[dia.cod][h], 'number');
+      assert.equal(typeof d.importe[dia.cod][h], 'number');
+    }
+    assert.ok(d.diasContados[dia.cod] >= 50);
+  });
+  assert.ok(d.info.ticketsUnicos > 100000);
+  const cap = C.configInicial().capacidad;
+  assert.equal(C.nivelCajas(d.tickets.DOM[13], cap), 2);
+  assert.equal(C.nivelCajas(d.tickets.MIE[9], cap), 1);
+  // Sirve para armar un rol completo
+  const cat = catalogo(14);
+  const sem = semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, Array(7).fill(i % 2 ? '08:00-17:00' : '12:00-21:00')])));
+  const { rol, v } = generar(cat, sem, { demanda: d });
+  assert.equal(rol.conVentas, true);
+  sinFaltas(v);
+});

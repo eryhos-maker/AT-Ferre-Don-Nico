@@ -95,6 +95,8 @@
     return fechaISO(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
   }
 
+  const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, jan: 1, apr: 4, aug: 8, dec: 12 };
+
   // Acepta: Date, número de serie de Excel, "YYYY-MM-DD", "DD/MM/YYYY",
   // "DD.MM.YYYY" (SAP), "YYYYMMDD" y cualquiera de ellas con hora después.
   function parseFecha(v) {
@@ -120,6 +122,12 @@
     }
     m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
     if (m) return fechaValida(+m[1], +m[2], +m[3]) ? fechaISO(+m[1], +m[2], +m[3]) : null;
+    // "1 sep 2025 0:00:00.0" (así sale el reporte de ventas por hora de SAP)
+    m = s.toLowerCase().match(/^(\d{1,2})[\s\-\/.]+([a-zñ]{3,})\.?[\s\-\/.,]+(\d{4})/);
+    if (m && MESES[m[2].slice(0, 3)]) {
+      const mo = MESES[m[2].slice(0, 3)];
+      return fechaValida(+m[3], mo, +m[1]) ? fechaISO(+m[3], mo, +m[1]) : null;
+    }
     if (/^\d+(\.\d+)?$/.test(s)) return parseFecha(Number(s));
     return null;
   }
