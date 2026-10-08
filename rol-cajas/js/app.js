@@ -46,11 +46,18 @@
     try {
       const t = localStorage.getItem(CLAVE);
       if (t) S = Object.assign(S, JSON.parse(t));
-      // Antes la capacidad inicial era 30 tickets por caja; se bajó a 20 al revisar el cálculo con el histórico.
-      const vieja = S.config && !(S.config.version >= 2);
-      S.config = Object.assign(C.configInicial(), S.config);
-      if (vieja) { if (S.config.capacidad === 30) S.config.capacidad = 20; S.config.version = 2; }
+      S.config = migrarConfig(S.config);
     } catch (e) { /* ignorar */ }
+  }
+
+  // Parámetros guardados con versiones anteriores (en el navegador o en un catálogo exportado):
+  // antes la capacidad inicial era 30 tickets por caja; se bajó a 20 al revisar el cálculo con el histórico.
+  function migrarConfig(cfg) {
+    const vieja = !cfg || !(cfg.version >= 2);
+    const c = Object.assign(C.configInicial(), cfg);
+    if (vieja && c.capacidad === 30) c.capacidad = 20;
+    c.version = C.configInicial().version;
+    return c;
   }
 
   function aviso(txt) {
@@ -168,7 +175,7 @@
       const lista = Array.isArray(d) ? d : d.personal;
       if (!Array.isArray(lista)) throw new Error('formato');
       S.catalogo = lista.map((p, i) => ({ nomina: String(p.nomina || '').trim(), nombre: String(p.nombre || '').trim(), color: p.color || C.COLORES[i % C.COLORES.length] }));
-      if (d.parametros) S.config = Object.assign(C.configInicial(), d.parametros);
+      if (d.parametros) S.config = migrarConfig(d.parametros);
       recalcularSemana();
       guardar(); pintar();
       aviso('Catálogo cargado: ' + S.catalogo.length + ' personas.');
@@ -329,7 +336,7 @@
     const h0 = Math.floor(Math.min(...hs.map((x) => x.ab)) / 60), h1 = Math.ceil(Math.max(...hs.map((x) => x.ci)) / 60);
     let h = '<h3>¿Cuántas cajas abrir? (tickets por hora en un día cargado)</h3>' +
       '<p class="ayuda">El número de cada cuadro es lo que se cobra en esa hora en un <b>día cargado</b>: 8 de cada 10 días se cobra eso o menos. Se planea con ese número y no con el promedio, porque con el promedio la tienda queda corta la mitad de los días. Pasa el cursor por un cuadro para ver también el promedio.</p>' +
-      '<p class="leyenda"><span><span class="muestra n1"></span><b>1 caja</b>: basta Caja 1, Caja 2 en piso</span><span><span class="muestra n2"></span><b>2 cajas</b>: Caja 2 se queda cobrando</span><span><span class="muestra n3"></span><b>3 cajas</b>: pico, abrir Caja 3 con apoyo</span><span>Una caja atiende ' + cap + ' tickets por hora sin fila (se cambia en Parámetros)</span></p>' +
+      '<p class="leyenda"><span><span class="muestra n1"></span><b>1 caja</b>: basta Caja 1, Caja 2 en piso</span><span><span class="muestra n2"></span><b>2 cajas</b>: Caja 2 se queda cobrando</span><span><span class="muestra n3"></span><b>3 cajas</b>: desde ' + S.config.caja3 + ' tickets por hora, abrir Caja 3 con apoyo</span><span>Una caja atiende ' + cap + ' tickets por hora sin fila (se cambia en Parámetros)</span></p>' +
       '<div class="desliza"><table class="calor"><thead><tr><th class="dia">Día</th>';
     for (let x = h0; x < h1; x++) h += '<th>' + C.corta(x * 60) + '</th>';
     h += '</tr></thead><tbody>';
@@ -341,7 +348,7 @@
         const t = C.cargaHora(d, dia.cod, x);
         const pesos = d.importe[dia.cod][x] || 0;
         if (!abierta) { h += '<td class="n0">–</td>'; continue; }
-        const n = C.nivelCajas(t, cap);
+        const n = C.nivelCajas(t, cap, S.config.caja3);
         h += '<td class="n' + n + '" title="' + dia.nombre + ' ' + x + ':00 · día cargado: ' + Math.round(t) + ' tickets · promedio: ' + prom.toFixed(1) + (conPesos(d) ? ' · $' + Math.round(pesos).toLocaleString('es-MX') : '') + '">' + Math.round(t) + (conPesos(d) ? '<small>$' + (pesos >= 1000 ? (pesos / 1000).toFixed(1) + 'k' : Math.round(pesos)) + '</small>' : '') + '</td>';
       }
       h += '</tr>';
@@ -377,7 +384,8 @@
       '<label class="campo">Turno máximo (horas)<input type="number" min="1" max="12" step="0.5" data-par="turnoMax" value="' + c.turnoMax + '"></label>' +
       '<label class="campo">Bloques de<select data-par="paso"><option value="30"' + (c.paso === 30 ? ' selected' : '') + '>media hora</option><option value="60"' + (c.paso === 60 ? ' selected' : '') + '>hora completa</option></select></label>' +
       '<label class="campo">Tickets por hora que atiende una caja sin que se haga fila<input type="number" min="1" max="500" data-par="capacidad" value="' + c.capacidad + '"></label>' +
-      '</div><p class="ayuda" style="margin-top:10px"><b>¿Por qué 20?</b> Cobrando sin parar, una caja saca unos 40 tickets por hora, pero los clientes llegan en grupos y entre uno y otro hay espera. En el año de historia, la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets. Si ves fila con una sola caja, baja el número; si la segunda caja se queda sin clientes, súbelo.</p>' +
+      '<label class="campo">Tickets por hora para abrir Caja 3 (apoyo)<input type="number" min="1" max="500" data-par="caja3" value="' + c.caja3 + '"></label>' +
+      '</div><p class="ayuda" style="margin-top:10px"><b>¿Por qué 20?</b> Cobrando sin parar, una caja saca unos 40 tickets por hora, pero los clientes llegan en grupos y entre uno y otro hay espera. En el año de historia, la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets. Si ves fila con una sola caja, baja el número; si la segunda caja se queda sin clientes, súbelo.<br><b>¿Por qué 55 para la Caja 3?</b> En el año de historia una caja casi nunca pasó de 28 a 29 tickets en una hora; con las dos a ese ritmo se atienden unos 55. Solo arriba de eso se pide la Caja 3, y pasa casi únicamente los domingos a mediodía.</p>' +
       '<div class="acciones" style="margin-top:16px"><button class="btn" type="button" id="btn-restaurar">↩️ Restaurar valores iniciales</button></div>';
   }
 
@@ -405,6 +413,7 @@
     }
     if (!rol.conVentas || !S.ventas) h += '<div class="caja-aviso info">Sin reporte de ventas: los apoyos de Caja 3 se calculan cuando lo subas (paso 4) y presiones <b>Actualizar apoyos Caja 3</b>. Mientras tanto, si no alcanza la gente, la Caja 2 se cubre primero sábado, domingo y viernes.</div>';
     else if (!rol.ordenConVentas && V.huecos.some((x) => x.caja === 2)) h += '<div class="caja-aviso info">Ya tienes el reporte de ventas y hay horas sin Caja 2. Si presionas <b>Generar rol de nuevo</b>, la Caja 2 se cubrirá primero en los días de más venta según el reporte (se pierden los cambios hechos a mano).</div>';
+    h += porQueHuecos(rol, V);
     if (rol.prioriza) h += '<div class="caja-aviso info"><b>No alcanza la gente marcada para tener Caja 2 todo el día.</b> Por eso el rol puso la Caja 2 primero en las horas que piden 2 o 3 cajas según ventas, empezando cada día por sus horas más cargadas. Las horas tranquilas quedaron en amarillo: ahí basta la Caja 1. Para cubrir más, marca más vendedores en el paso 3 o sube el máximo de días en Parámetros.</div>';
     h += '</div>';
 
@@ -507,6 +516,25 @@
     aviso(V.problemas.length ? 'Cambio guardado. Hay ' + V.problemas.length + ' aviso(s): revísalos arriba.' : 'Cambio guardado. ✔ Todo cumple las reglas.');
   }
 
+  // Explica en palabras por qué quedan horas sin Caja 2 que sí la necesitan.
+  function porQueHuecos(rol, V) {
+    const rojos = V.huecos.filter((x) => x.caja === 2 && !x.tranquilo && !x.sugerencias.length);
+    if (!rojos.length) return '';
+    const max = S.config.maxDias;
+    const grupos = {};
+    rojos.forEach((x) => {
+      const quien = x.presentes.map((p) => p.nomina).sort().join(',');
+      (grupos[quien] = grupos[quien] || { pres: x.presentes, horas: [] }).horas.push(rol.dias[x.dia].nombre.slice(0, 3) + ' ' + C.rangoCorto(x.ini, x.fin));
+    });
+    let h = '<div class="caja-aviso alerta"><b>¿Por qué no hay Caja 2 en esas horas?</b> No es un error del cálculo: no queda nadie que pueda entrar.<ul>';
+    Object.values(grupos).forEach((g) => {
+      const llenos = g.pres.filter((p) => p.dias >= max);
+      h += '<li><b>' + esc(g.horas.join(', ')) + '</b>: a esa hora solo están en tienda ' + (g.pres.length ? g.pres.map((p) => esc(nombre(p.nomina)) + ' (' + p.dias + '/' + max + (p.hoy ? ', hoy en C' + p.hoy : '') + ')').join(', ') : 'nadie del catálogo') + '. ' +
+        (llenos.length === g.pres.length && g.pres.length ? 'Todos ya llegaron a ' + max + ' días en caja esta semana.' : 'Los demás ya están en caja a esa hora.') + '</li>';
+    });
+    return h + '</ul>Para cubrirlas: <b>1)</b> sube "Días máximos en Caja 1 / Caja 2" en Parámetros, <b>2)</b> pasa en GIRHA a alguien de la tarde a un horario de mañana, o <b>3)</b> acepta que en esas horas la Caja 2 es un vendedor de piso que entra cuando se junta fila.</div>';
+  }
+
   function modalHueco(k) {
     const V = C.validarRol(rolVigente(), opts());
     const x = V.huecos[k];
@@ -583,7 +611,7 @@
     for (let h0 = Math.floor(d.ab / 60) * 60; h0 < d.ci; h0 += 60) {
       const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
       const tk = dem ? C.cargaHora(dem, d.cod, h0 / 60) : null;
-      const n = dem ? C.nivelCajas(tk, S.config.capacidad) : 0;
+      const n = dem ? C.nivelCajas(tk, S.config.capacidad, S.config.caja3) : 0;
       const c1 = quienesEn(d.turnos.filter((t) => t.caja === 1), a, b);
       const c2 = quienesEn(d.turnos.filter((t) => t.caja === 2), a, b);
       const c3 = quienesEn(d.apoyos, a, b);
@@ -658,7 +686,7 @@
         const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
         const nm = (l) => quienesEn(l, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ') || 'FALTA';
         const tk = dem ? C.cargaHora(dem, d.cod, h0 / 60) : '';
-        porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad) : '', dem ? Math.round(tk * 10) / 10 : '', conPesos(dem) ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
+        porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad, S.config.caja3) : '', dem ? Math.round(tk * 10) / 10 : '', conPesos(dem) ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
           nm(d.turnos.filter((t) => t.caja === 1)), nm(d.turnos.filter((t) => t.caja === 2)), quienesEn(d.apoyos, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ')]);
       }
     });

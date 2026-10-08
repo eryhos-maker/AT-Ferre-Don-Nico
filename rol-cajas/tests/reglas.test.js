@@ -372,3 +372,33 @@ test('si alcanza la gente, las dos cajas se cubren todo el día aunque haya hora
   assert.equal(rol.prioriza, false);
   assert.equal(v.huecos.length, 0);
 });
+
+// ------------------------------------------------ Caja 3 y explicación de huecos
+test('la Caja 3 solo se abre desde el umbral de tickets y cada pico se cubre con pocas personas', () => {
+  assert.equal(C.nivelCajas(45, 20, 55), 2);
+  assert.equal(C.nivelCajas(55, 20, 55), 3);
+  assert.equal(C.nivelCajas(12, 20, 55), 1);
+  require('../js/historico.js');
+  const d = globalThis.HISTORICO_VENTAS.demanda;
+  const cat = catalogo(14);
+  const sem = semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, Array(7).fill(i % 2 ? '08:00-17:00' : '12:00-21:00')])));
+  const { rol, v, config } = generar(cat, sem, { demanda: d });
+  sinFaltas(v);
+  assert.equal(config.caja3, 55);
+  // con el histórico la Caja 3 solo se pide el domingo a mediodía
+  rol.dias.forEach((dia) => { if (dia.cod !== 'DOM') assert.equal(dia.apoyos.length, 0, dia.nombre); });
+  const dom = rol.dias.find((x) => x.cod === 'DOM');
+  assert.ok(dom.apoyos.length >= 1 && dom.apoyos.length <= 2, 'apoyos domingo: ' + dom.apoyos.length);
+  assert.ok(dom.apoyos.every((a) => a.nomina));
+});
+
+test('cada hueco dice quién está en tienda a esa hora y cuántos días de caja lleva', () => {
+  const cat = catalogo(2);
+  const sem = semanaDe(cat, { 1001: Array(7).fill('08:00-14:00'), 1002: Array(7).fill('15:00-21:00') });
+  const { v } = generar(cat, sem);
+  const h = v.huecos.find((x) => x.caja === 2 && x.ini === 8 * 60);
+  assert.ok(h);
+  // el hueco va de 8 a 21: están los dos, cada uno con sus días de caja y la caja en la que está hoy
+  assert.deepEqual(h.presentes.map((p) => p.nomina).sort(), ['1001', '1002']);
+  h.presentes.forEach((p) => { assert.ok(p.dias >= 1 && p.dias <= 3); assert.equal(p.hoy, 1); });
+});

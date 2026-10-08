@@ -38,7 +38,9 @@ Funciona en el navegador, en computadora o celular. **Tus archivos no salen de t
 **Cómo decide cuántas cajas**
 - Toma los tickets de un **día cargado**: 8 de cada 10 días se cobra eso o menos en esa hora. No usa el promedio, porque con el promedio la tienda queda corta la mitad de los días.
 - Divide entre lo que atiende una caja **sin que se haga fila**: 20 tickets por hora (se cambia en Parámetros). Cobrando sin parar una caja saca unos 40, pero los clientes llegan en grupos; en el año de historia la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets.
-- Resultado con el histórico: entre semana y sábado, una caja de 8 a 10 y dos cajas casi todas las horas de 10 a 20; domingo, dos cajas desde las 9 y tres de 11 a 17.
+- La Caja 3 se pide solo desde **55 tickets por hora** (dos cajas a su máximo real). Cada pico se cubre con la menor cantidad de personas posible.
+- Si quedan horas sin Caja 2, la pantalla del rol explica quién está en tienda a esa hora y cuántos días de caja lleva cada uno.
+- Resultado con el histórico: entre semana y sábado, una caja de 8 a 10 y dos cajas casi todas las horas de 10 a 20; domingo, dos cajas desde las 9 y Caja 3 de 12 a 15.
 - Si el archivo trae una fila por artículo, la app cuenta **tickets únicos**, no filas.
 - Verás un **mapa de calor** por día y hora:
   - 🟩 **1 caja**: con Caja 1 basta; Caja 2 puede estar en piso.
@@ -47,7 +49,7 @@ Funciona en el navegador, en computadora o celular. **Tus archivos no salen de t
 - ¿Ya tenías el rol hecho? Presiona **🔁 Actualizar apoyos Caja 3**. **Caja 1 y Caja 2 no cambian.**
 
 ### 5 · Parámetros
-Horario de la tienda por día, capacidad por caja (20 tickets por hora sin fila), máximo de días en caja (3), turno mínimo y máximo (3 y 6 h) y bloques de media hora u hora completa. Si cambias algo, vuelve a generar el rol.
+Horario de la tienda por día, capacidad por caja (20 tickets por hora sin fila), tickets por hora para abrir Caja 3 (55), máximo de días en caja (3), turno mínimo y máximo (3 y 6 h) y bloques de media hora u hora completa. Si cambias algo, vuelve a generar el rol.
 
 ### 6 · Rol
 - Formato igual al de Excel: **ROL DE CAJAS MINA**, vendedores en filas, **jueves a miércoles** en columnas, color por persona y etiqueta **C1 / C2**.
