@@ -273,7 +273,7 @@
     S.rol = C.generarRol(opts());
     guardar();
     ir('rol');
-    aviso('Rol generado. Toca cualquier celda para ver por qué se asignó.');
+    aviso(previo ? 'Rol generado de nuevo con las ventas y parámetros actuales.' : 'Rol generado. Toca cualquier celda para ver por qué se asignó.');
   }
 
   // ------------------------------------------------------------ 4. ventas
@@ -405,6 +405,7 @@
     }
     if (!rol.conVentas || !S.ventas) h += '<div class="caja-aviso info">Sin reporte de ventas: los apoyos de Caja 3 se calculan cuando lo subas (paso 4) y presiones <b>Actualizar apoyos Caja 3</b>. Mientras tanto, si no alcanza la gente, la Caja 2 se cubre primero sábado, domingo y viernes.</div>';
     else if (!rol.ordenConVentas && V.huecos.some((x) => x.caja === 2)) h += '<div class="caja-aviso info">Ya tienes el reporte de ventas y hay horas sin Caja 2. Si presionas <b>Generar rol de nuevo</b>, la Caja 2 se cubrirá primero en los días de más venta según el reporte (se pierden los cambios hechos a mano).</div>';
+    if (rol.prioriza) h += '<div class="caja-aviso info"><b>No alcanza la gente marcada para tener Caja 2 todo el día.</b> Por eso el rol puso la Caja 2 primero en las horas que piden 2 o 3 cajas según ventas, empezando cada día por sus horas más cargadas. Las horas tranquilas quedaron en amarillo: ahí basta la Caja 1. Para cubrir más, marca más vendedores en el paso 3 o sube el máximo de días en Parámetros.</div>';
     h += '</div>';
 
     h += '<div class="hoja"><h2 class="titulo">ROL DE CAJAS MINA</h2><p class="semana-txt">Semana del jueves ' + C.fechaCorta(SEM.inicio) + ' al miércoles ' + C.fechaCorta(fin) + '/' + fin.slice(0, 4) + '</p>';
@@ -433,7 +434,7 @@
     // huecos
     if (V.huecos.length) {
       h += '<tr class="fila-extra fila-hueco"><td class="nombre"><b>SIN CUBRIR</b><br>(menos de 2 cajas)</td>' + rol.dias.map((d) => '<td>' +
-        V.huecos.map((x, k) => ({ x, k })).filter((o) => o.x.dia === d.idx).map((o) => '<button type="button" class="pastilla hueco" data-hueco="' + o.k + '">C' + o.x.caja + ' ' + C.rangoCorto(o.x.ini, o.x.fin) + '</button>').join('') +
+        V.huecos.map((x, k) => ({ x, k })).filter((o) => o.x.dia === d.idx).map((o) => '<button type="button" class="pastilla hueco' + (o.x.tranquilo ? ' tranquilo' : '') + '" title="' + (o.x.tranquilo ? 'Hora tranquila: según ventas basta la Caja 1' : 'Falta cubrir') + '" data-hueco="' + o.k + '">C' + o.x.caja + ' ' + C.rangoCorto(o.x.ini, o.x.fin) + '</button>').join('') +
         '</td>').join('') + '<td></td></tr>';
     }
     // apoyos caja 3
@@ -511,7 +512,9 @@
     const x = V.huecos[k];
     const d = rolVigente().dias[x.dia];
     let h = '<h3>Hueco · ' + d.nombre + ' · Caja ' + x.caja + '</h3>' +
-      '<div class="caja-aviso error">Nadie cubre la Caja ' + x.caja + ' de <b>' + C.aHora(x.ini) + ' a ' + C.aHora(x.fin) + '</b>. La app no inventa turnos: tú decides quién lo cubre.</div>';
+      (x.tranquilo
+        ? '<div class="caja-aviso alerta">Nadie cubre la Caja 2 de <b>' + C.aHora(x.ini) + ' a ' + C.aHora(x.fin) + '</b>, pero es una <b>hora tranquila</b>: según ventas basta la Caja 1. Si quieres cubrirla, elige a alguien.</div>'
+        : '<div class="caja-aviso error">Nadie cubre la Caja ' + x.caja + ' de <b>' + C.aHora(x.ini) + ' a ' + C.aHora(x.fin) + '</b>. La app no inventa turnos: tú decides quién lo cubre.</div>');
     if (x.sugerencias.length) {
       h += '<p>Pueden cubrirlo según su horario GIRHA (y tienen menos de ' + S.config.maxDias + ' días en caja):</p><ul class="lista-sug">' +
         x.sugerencias.slice(0, 10).map((s) => '<li><span>' + chipPersona(s.nomina) + ' <small>GIRHA ' + esc(s.girha) + ' · ' + s.dias + '/' + S.config.maxDias + ' días' + (s.marcado ? '' : ' · <b>no marcado</b>') + (s.completo ? '' : ' · cubre solo una parte') + '</small></span>' +
@@ -739,6 +742,13 @@
         guardar(); pintar();
         return aviso('Listo: ' + dem.info.ticketsUnicos.toLocaleString('es-MX') + ' tickets en ' + dem.info.dias + ' días.');
       }
+      case 'btn-borrar-rol':
+        if (!rolVigente()) return aviso('No hay rol que borrar.');
+        if (!confirm('¿Borrar el rol de esta semana? Se pierden los cambios hechos a mano. El personal, GIRHA y los parámetros no se tocan.')) return;
+        S.rol = null;
+        guardar();
+        ir('semana');
+        return aviso('Rol borrado. Marca quién entra a caja y presiona Generar rol.');
       case 'btn-restaurar':
         if (confirm('¿Regresar todos los parámetros a los valores iniciales?')) { S.config = C.configInicial(); guardar(); pintar(); }
         return;

@@ -119,6 +119,7 @@ tr:last-child td { border-bottom: 0; }
 .fila-apoyo td.nombre { background: #fde2c4; color: #7a3d00; }
 .pastilla { display: block; width: 100%; border: 0; border-radius: 6px; padding: 4px 3px; margin: 2px 0; font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; line-height: 1.2; }
 .pastilla.hueco { background: #d0021b; color: #fff; }
+.pastilla.hueco.tranquilo { background: #ffe699; color: #6b4a00; }
 .pastilla.apoyo { border: 2px dashed #b35900; }
 .pastilla.sin { background: #fff; color: #d0021b; border: 2px solid #d0021b; }
 .leyenda { font-size: .8rem; color: var(--suave); margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
