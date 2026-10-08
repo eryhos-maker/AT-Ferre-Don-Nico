@@ -267,10 +267,12 @@ test('sin reporte de ventas y sin gente suficiente: la Caja 2 se cubre primero e
   cat.forEach((p, i) => { h[p.nomina] = [M, T, M, DM, T, M, T].map((x, k) => (k === (i + 4) % 7 && k !== 2 ? 'D' : i % 2 ? (x === M ? T : x === T ? M : x === DM ? DT : DM) : x)); });
   const { rol, v } = generar(cat, semanaDe(cat, h));
   sinFaltas(v);
-  assert.ok(v.huecos.length > 0, 'con 10 personas no alcanza');
+  // sin cajero de Caja 2 = horas que cubre un vendedor de piso o que quedan sin nadie
+  const sinCajero2 = (dia) => v.piso[dia.idx].length;
+  assert.ok(rol.dias.some((d) => sinCajero2(d) > 0), 'con 10 personas no alcanza');
   const sab = rol.dias[2];
   assert.equal(sab.cod, 'SAB');
-  assert.ok(!v.huecos.some((x) => x.dia === 2 && x.caja === 2), 'el sábado tiene Caja 2 completa');
+  assert.equal(sinCajero2(sab), 0, 'el sábado tiene cajero de Caja 2 todo el día');
   assert.ok(!v.huecos.some((x) => x.caja === 1), 'la Caja 1 siempre queda cubierta');
 });
 
@@ -371,4 +373,60 @@ test('si alcanza la gente, las dos cajas se cubren todo el día aunque haya hora
   sinFaltas(v);
   assert.equal(rol.prioriza, false);
   assert.equal(v.huecos.length, 0);
+});
+
+// ------------------------------------------------ Caja 3 y explicación de huecos
+test('la Caja 3 solo se abre desde el umbral de tickets y cada pico se cubre con pocas personas', () => {
+  assert.equal(C.nivelCajas(45, 20, 55), 2);
+  assert.equal(C.nivelCajas(55, 20, 55), 3);
+  assert.equal(C.nivelCajas(12, 20, 55), 1);
+  require('../js/historico.js');
+  const d = globalThis.HISTORICO_VENTAS.demanda;
+  const cat = catalogo(14);
+  const sem = semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, Array(7).fill(i % 2 ? '08:00-17:00' : '12:00-21:00')])));
+  const { rol, v, config } = generar(cat, sem, { demanda: d });
+  sinFaltas(v);
+  assert.equal(config.caja3, 55);
+  // con el histórico la Caja 3 solo se pide el domingo a mediodía
+  rol.dias.forEach((dia) => { if (dia.cod !== 'DOM') assert.equal(dia.apoyos.length, 0, dia.nombre); });
+  const dom = rol.dias.find((x) => x.cod === 'DOM');
+  assert.ok(dom.apoyos.length >= 1 && dom.apoyos.length <= 2, 'apoyos domingo: ' + dom.apoyos.length);
+  assert.ok(dom.apoyos.every((a) => a.nomina));
+});
+
+test('cada hueco dice quién está en tienda a esa hora y cuántos días de caja lleva', () => {
+  const cat = catalogo(2);
+  const sem = semanaDe(cat, { 1001: Array(7).fill('08:00-14:00'), 1002: Array(7).fill('15:00-21:00') });
+  const { v } = generar(cat, sem);
+  const h = v.huecos.find((x) => x.caja === 2 && x.ini === 8 * 60);
+  assert.ok(h);
+  // el hueco va de 8 a 21: están los dos, cada uno con sus días de caja y la caja en la que está hoy
+  assert.deepEqual(h.presentes.map((p) => p.nomina).sort(), ['1001', '1002']);
+  h.presentes.forEach((p) => { assert.ok(p.dias >= 1 && p.dias <= 3); assert.equal(p.hoy, 1); });
+});
+
+// ------------------------------------------------------------ Caja 2 de piso
+test('donde no hay cajero de Caja 2, un vendedor de piso la cubre y no cuenta en sus días', () => {
+  const cat = catalogo(4);
+  // 1001 y 1002 en la mañana, 1003 y 1004 en la tarde: solo 1 día de caja cada uno
+  const sem = semanaDe(cat, { 1001: Array(7).fill('08:00-14:00'), 1002: Array(7).fill('08:00-14:00'), 1003: Array(7).fill('15:00-21:00'), 1004: Array(7).fill('15:00-21:00') });
+  const { rol, v, config } = generar(cat, sem, { config: { maxDias: 1, turnoMax: 7 } });
+  sinFaltas(v);
+  v.piso.forEach((lista, i) => {
+    const dia = rol.dias[i];
+    lista.forEach((x) => {
+      if (!x.nomina) return;
+      // está en tienda y no tiene turno de caja a esa hora
+      const d = C.disponible(sem, x.nomina, i);
+      assert.ok(d && d.ini <= x.ini && d.fin >= x.fin, 'en horario');
+      assert.ok(!dia.turnos.some((t) => t.nomina === x.nomina && t.ini < x.fin && t.fin > x.ini), 'no está en caja');
+    });
+  });
+  // la Caja 2 de piso no suma días de caja
+  Object.values(v.resumen).forEach((r) => assert.ok(r.dias <= config.maxDias));
+  assert.ok(Object.values(v.resumen).some((r) => r.piso > 0));
+  // ya no se marca como hueco lo que cubre alguien de piso
+  v.huecos.filter((x) => x.caja === 2).forEach((x) => {
+    assert.ok(v.piso[x.dia].some((p) => !p.nomina && p.ini === x.ini && p.fin === x.fin));
+  });
 });

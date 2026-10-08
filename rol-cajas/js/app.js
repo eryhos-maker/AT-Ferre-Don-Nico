@@ -46,11 +46,18 @@
     try {
       const t = localStorage.getItem(CLAVE);
       if (t) S = Object.assign(S, JSON.parse(t));
-      // Antes la capacidad inicial era 30 tickets por caja; se bajó a 20 al revisar el cálculo con el histórico.
-      const vieja = S.config && !(S.config.version >= 2);
-      S.config = Object.assign(C.configInicial(), S.config);
-      if (vieja) { if (S.config.capacidad === 30) S.config.capacidad = 20; S.config.version = 2; }
+      S.config = migrarConfig(S.config);
     } catch (e) { /* ignorar */ }
+  }
+
+  // Parámetros guardados con versiones anteriores (en el navegador o en un catálogo exportado):
+  // antes la capacidad inicial era 30 tickets por caja; se bajó a 20 al revisar el cálculo con el histórico.
+  function migrarConfig(cfg) {
+    const vieja = !cfg || !(cfg.version >= 2);
+    const c = Object.assign(C.configInicial(), cfg);
+    if (vieja && c.capacidad === 30) c.capacidad = 20;
+    c.version = C.configInicial().version;
+    return c;
   }
 
   function aviso(txt) {
@@ -168,7 +175,7 @@
       const lista = Array.isArray(d) ? d : d.personal;
       if (!Array.isArray(lista)) throw new Error('formato');
       S.catalogo = lista.map((p, i) => ({ nomina: String(p.nomina || '').trim(), nombre: String(p.nombre || '').trim(), color: p.color || C.COLORES[i % C.COLORES.length] }));
-      if (d.parametros) S.config = Object.assign(C.configInicial(), d.parametros);
+      if (d.parametros) S.config = migrarConfig(d.parametros);
       recalcularSemana();
       guardar(); pintar();
       aviso('Catálogo cargado: ' + S.catalogo.length + ' personas.');
@@ -329,7 +336,7 @@
     const h0 = Math.floor(Math.min(...hs.map((x) => x.ab)) / 60), h1 = Math.ceil(Math.max(...hs.map((x) => x.ci)) / 60);
     let h = '<h3>¿Cuántas cajas abrir? (tickets por hora en un día cargado)</h3>' +
       '<p class="ayuda">El número de cada cuadro es lo que se cobra en esa hora en un <b>día cargado</b>: 8 de cada 10 días se cobra eso o menos. Se planea con ese número y no con el promedio, porque con el promedio la tienda queda corta la mitad de los días. Pasa el cursor por un cuadro para ver también el promedio.</p>' +
-      '<p class="leyenda"><span><span class="muestra n1"></span><b>1 caja</b>: basta Caja 1, Caja 2 en piso</span><span><span class="muestra n2"></span><b>2 cajas</b>: Caja 2 se queda cobrando</span><span><span class="muestra n3"></span><b>3 cajas</b>: pico, abrir Caja 3 con apoyo</span><span>Una caja atiende ' + cap + ' tickets por hora sin fila (se cambia en Parámetros)</span></p>' +
+      '<p class="leyenda"><span><span class="muestra n1"></span><b>1 caja</b>: basta Caja 1, Caja 2 en piso</span><span><span class="muestra n2"></span><b>2 cajas</b>: Caja 2 se queda cobrando</span><span><span class="muestra n3"></span><b>3 cajas</b>: desde ' + S.config.caja3 + ' tickets por hora, abrir Caja 3 con apoyo</span><span>Una caja atiende ' + cap + ' tickets por hora sin fila (se cambia en Parámetros)</span></p>' +
       '<div class="desliza"><table class="calor"><thead><tr><th class="dia">Día</th>';
     for (let x = h0; x < h1; x++) h += '<th>' + C.corta(x * 60) + '</th>';
     h += '</tr></thead><tbody>';
@@ -341,7 +348,7 @@
         const t = C.cargaHora(d, dia.cod, x);
         const pesos = d.importe[dia.cod][x] || 0;
         if (!abierta) { h += '<td class="n0">–</td>'; continue; }
-        const n = C.nivelCajas(t, cap);
+        const n = C.nivelCajas(t, cap, S.config.caja3);
         h += '<td class="n' + n + '" title="' + dia.nombre + ' ' + x + ':00 · día cargado: ' + Math.round(t) + ' tickets · promedio: ' + prom.toFixed(1) + (conPesos(d) ? ' · $' + Math.round(pesos).toLocaleString('es-MX') : '') + '">' + Math.round(t) + (conPesos(d) ? '<small>$' + (pesos >= 1000 ? (pesos / 1000).toFixed(1) + 'k' : Math.round(pesos)) + '</small>' : '') + '</td>';
       }
       h += '</tr>';
@@ -377,7 +384,8 @@
       '<label class="campo">Turno máximo (horas)<input type="number" min="1" max="12" step="0.5" data-par="turnoMax" value="' + c.turnoMax + '"></label>' +
       '<label class="campo">Bloques de<select data-par="paso"><option value="30"' + (c.paso === 30 ? ' selected' : '') + '>media hora</option><option value="60"' + (c.paso === 60 ? ' selected' : '') + '>hora completa</option></select></label>' +
       '<label class="campo">Tickets por hora que atiende una caja sin que se haga fila<input type="number" min="1" max="500" data-par="capacidad" value="' + c.capacidad + '"></label>' +
-      '</div><p class="ayuda" style="margin-top:10px"><b>¿Por qué 20?</b> Cobrando sin parar, una caja saca unos 40 tickets por hora, pero los clientes llegan en grupos y entre uno y otro hay espera. En el año de historia, la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets. Si ves fila con una sola caja, baja el número; si la segunda caja se queda sin clientes, súbelo.</p>' +
+      '<label class="campo">Tickets por hora para abrir Caja 3 (apoyo)<input type="number" min="1" max="500" data-par="caja3" value="' + c.caja3 + '"></label>' +
+      '</div><p class="ayuda" style="margin-top:10px"><b>¿Por qué 20?</b> Cobrando sin parar, una caja saca unos 40 tickets por hora, pero los clientes llegan en grupos y entre uno y otro hay espera. En el año de historia, la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets. Si ves fila con una sola caja, baja el número; si la segunda caja se queda sin clientes, súbelo.<br><b>¿Por qué 55 para la Caja 3?</b> En el año de historia una caja casi nunca pasó de 28 a 29 tickets en una hora; con las dos a ese ritmo se atienden unos 55. Solo arriba de eso se pide la Caja 3, y pasa casi únicamente los domingos a mediodía.</p>' +
       '<div class="acciones" style="margin-top:16px"><button class="btn" type="button" id="btn-restaurar">↩️ Restaurar valores iniciales</button></div>';
   }
 
@@ -405,7 +413,8 @@
     }
     if (!rol.conVentas || !S.ventas) h += '<div class="caja-aviso info">Sin reporte de ventas: los apoyos de Caja 3 se calculan cuando lo subas (paso 4) y presiones <b>Actualizar apoyos Caja 3</b>. Mientras tanto, si no alcanza la gente, la Caja 2 se cubre primero sábado, domingo y viernes.</div>';
     else if (!rol.ordenConVentas && V.huecos.some((x) => x.caja === 2)) h += '<div class="caja-aviso info">Ya tienes el reporte de ventas y hay horas sin Caja 2. Si presionas <b>Generar rol de nuevo</b>, la Caja 2 se cubrirá primero en los días de más venta según el reporte (se pierden los cambios hechos a mano).</div>';
-    if (rol.prioriza) h += '<div class="caja-aviso info"><b>No alcanza la gente marcada para tener Caja 2 todo el día.</b> Por eso el rol puso la Caja 2 primero en las horas que piden 2 o 3 cajas según ventas, empezando cada día por sus horas más cargadas. Las horas tranquilas quedaron en amarillo: ahí basta la Caja 1. Para cubrir más, marca más vendedores en el paso 3 o sube el máximo de días en Parámetros.</div>';
+    h += porQueHuecos(rol, V);
+    if (rol.prioriza) h += '<div class="caja-aviso info"><b>No alcanza la gente marcada para tener Caja 2 todo el día.</b> Por eso el rol puso la Caja 2 primero en las horas que piden 2 o 3 cajas según ventas, empezando cada día por sus horas más cargadas. En las horas sin cajero de Caja 2, la cubre un vendedor de piso que entra cuando se junta fila (fila <b>CAJA 2 DE PISO</b>).</div>';
     h += '</div>';
 
     h += '<div class="hoja"><h2 class="titulo">ROL DE CAJAS MINA</h2><p class="semana-txt">Semana del jueves ' + C.fechaCorta(SEM.inicio) + ' al miércoles ' + C.fechaCorta(fin) + '/' + fin.slice(0, 4) + '</p>';
@@ -431,6 +440,12 @@
       });
       h += '<td class="cuenta"' + (dias > S.config.maxDias ? ' style="background:#ffc7ce;color:#9c0006;font-weight:800"' : '') + '>' + dias + '/' + S.config.maxDias + '</td></tr>';
     });
+    // Caja 2 de piso
+    if (V.piso.some((l) => l.some((x) => x.nomina))) {
+      h += '<tr class="fila-extra fila-piso"><td class="nombre"><b>CAJA 2 DE PISO</b><br>(entra si hay fila)</td>' + rol.dias.map((d) => '<td>' +
+        V.piso[d.idx].filter((x) => x.nomina).map((x) => { const bg = color(x.nomina); return '<span class="pastilla piso" style="background:' + esc(bg) + ';color:' + textoSobre(bg) + '" title="Está en piso y entra a cobrar en Caja 2 cuando se junta fila. No cuenta en sus días de caja.">' + C.rangoCorto(x.ini, x.fin) + ' ' + esc(nombre(x.nomina)) + '</span>'; }).join('') +
+        '</td>').join('') + '<td></td></tr>';
+    }
     // huecos
     if (V.huecos.length) {
       h += '<tr class="fila-extra fila-hueco"><td class="nombre"><b>SIN CUBRIR</b><br>(menos de 2 cajas)</td>' + rol.dias.map((d) => '<td>' +
@@ -448,13 +463,13 @@
       }).join('') : '<span style="color:#9aa5b3;font-size:.8rem">—</span>') + '</td>').join('') + '<td></td>';
     }
     h += '</tr></tbody></table></div>';
-    h += '<p class="leyenda"><span><b>C1</b> Cajero fijo: nunca deja la caja.</span><span><b>C2</b> Cajero flotante: apoya en piso y regresa a cobrar cuando se junta fila.</span><span><b>C3</b> Apoyo solo en horas pico.</span><span>Mantenerse comunicados por radio.</span></p></div>';
+    h += '<p class="leyenda"><span><b>C1</b> Cajero fijo: nunca deja la caja.</span><span><b>C2</b> Cajero flotante: apoya en piso y regresa a cobrar cuando se junta fila.</span><span><b>C2 de piso</b> Cuando nadie tiene turno de Caja 2, este vendedor sigue en piso y entra a cobrar si se junta fila; no cuenta en sus días de caja.</span><span><b>C3</b> Apoyo solo en horas pico.</span><span>Mantenerse comunicados por radio.</span></p></div>';
 
     // resumen
-    h += '<div class="salto"><h3>Resumen por vendedor</h3><div class="desliza"><table><thead><tr><th>Vendedor</th><th class="centro">Días C1/C2</th><th class="centro">Turnos C1</th><th class="centro">Turnos C2</th><th class="centro">Horas en caja</th><th class="centro">Cierres</th><th class="centro">Fin de semana</th><th class="centro">Apoyos C3</th></tr></thead><tbody>' +
+    h += '<div class="salto"><h3>Resumen por vendedor</h3><div class="desliza"><table><thead><tr><th>Vendedor</th><th class="centro">Días C1/C2</th><th class="centro">Turnos C1</th><th class="centro">Turnos C2</th><th class="centro">Horas en caja</th><th class="centro">Cierres</th><th class="centro">Fin de semana</th><th class="centro">C2 de piso</th><th class="centro">Apoyos C3</th></tr></thead><tbody>' +
       nominasCatalogo().filter((n) => V.resumen[n] || S.seleccion.includes(n)).map((n) => {
-        const r = V.resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, cierres: 0, finde: 0 };
-        return '<tr><td>' + chipPersona(n) + (S.seleccion.includes(n) ? '' : ' <small>(no marcado)</small>') + '</td><td class="centro"' + (r.dias > S.config.maxDias ? ' style="color:#9c0006;font-weight:800"' : '') + '>' + r.dias + '/' + S.config.maxDias + '</td><td class="centro">' + r.c1 + '</td><td class="centro">' + r.c2 + '</td><td class="centro">' + C.horasTxt(r.horas) + '</td><td class="centro">' + r.cierres + '</td><td class="centro">' + r.finde + '</td><td class="centro">' + r.apoyos + '</td></tr>';
+        const r = V.resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, piso: 0, cierres: 0, finde: 0 };
+        return '<tr><td>' + chipPersona(n) + (S.seleccion.includes(n) ? '' : ' <small>(no marcado)</small>') + '</td><td class="centro"' + (r.dias > S.config.maxDias ? ' style="color:#9c0006;font-weight:800"' : '') + '>' + r.dias + '/' + S.config.maxDias + '</td><td class="centro">' + r.c1 + '</td><td class="centro">' + r.c2 + '</td><td class="centro">' + C.horasTxt(r.horas) + '</td><td class="centro">' + r.cierres + '</td><td class="centro">' + r.finde + '</td><td class="centro">' + (r.piso || 0) + '</td><td class="centro">' + r.apoyos + '</td></tr>';
       }).join('') + '</tbody></table></div></div>';
     cuerpo.innerHTML = h;
   }
@@ -505,6 +520,25 @@
     guardar(); cerrarModal(); pintar();
     const V = C.validarRol(rol, opts());
     aviso(V.problemas.length ? 'Cambio guardado. Hay ' + V.problemas.length + ' aviso(s): revísalos arriba.' : 'Cambio guardado. ✔ Todo cumple las reglas.');
+  }
+
+  // Explica en palabras por qué quedan horas sin Caja 2 que sí la necesitan.
+  function porQueHuecos(rol, V) {
+    const rojos = V.huecos.filter((x) => x.caja === 2 && !x.tranquilo && !x.sugerencias.length);
+    if (!rojos.length) return '';
+    const max = S.config.maxDias;
+    const grupos = {};
+    rojos.forEach((x) => {
+      const quien = x.presentes.map((p) => p.nomina).sort().join(',');
+      (grupos[quien] = grupos[quien] || { pres: x.presentes, horas: [] }).horas.push(rol.dias[x.dia].nombre.slice(0, 3) + ' ' + C.rangoCorto(x.ini, x.fin));
+    });
+    let h = '<div class="caja-aviso alerta"><b>¿Por qué no hay Caja 2 en esas horas?</b> No es un error del cálculo: no hay nadie en piso que pueda entrar.<ul>';
+    Object.values(grupos).forEach((g) => {
+      const llenos = g.pres.filter((p) => p.dias >= max);
+      h += '<li><b>' + esc(g.horas.join(', ')) + '</b>: a esa hora solo están en tienda ' + (g.pres.length ? g.pres.map((p) => esc(nombre(p.nomina)) + ' (' + p.dias + '/' + max + (p.hoy ? ', hoy en C' + p.hoy : '') + ')').join(', ') : 'nadie del catálogo') + '. ' +
+        (llenos.length === g.pres.length && g.pres.length ? 'Todos ya llegaron a ' + max + ' días en caja esta semana.' : 'Los demás ya están en caja a esa hora.') + '</li>';
+    });
+    return h + '</ul>Para cubrirlas: <b>1)</b> sube "Días máximos en Caja 1 / Caja 2" en Parámetros, <b>2)</b> pasa en GIRHA a alguien de la tarde a un horario de mañana, o <b>3)</b> acepta que en esas horas la Caja 2 es un vendedor de piso que entra cuando se junta fila.</div>';
   }
 
   function modalHueco(k) {
@@ -575,6 +609,7 @@
     if (!rol) { cuerpo.innerHTML = '<div class="caja-aviso info">Primero genera el rol.</div>'; return; }
     const d = rol.dias[S.diaVista] || rol.dias[0];
     const dem = S.ventas ? S.ventas.demanda : null;
+    const Vd = C.validarRol(rol, opts());
     let h = '<div class="dias-btn">' + rol.dias.map((x) => '<button type="button" class="btn chico" data-dia="' + x.idx + '" aria-pressed="' + (x.idx === d.idx) + '">' + x.nombre.slice(0, 3) + ' ' + C.fechaCorta(x.fecha) + '</button>').join('') + '</div>';
     h += '<p class="ayuda"><b>' + d.nombre + ' ' + C.fechaCorta(d.fecha) + '</b> · tienda de ' + C.rangoLargo(d.ab, d.ci) + '. Cada renglón es una hora: quién cobra en cada caja.</p>';
     h += '<div class="desliza"><table class="linea"><thead><tr><th>Hora</th><th>Ventas</th><th>Caja 1 · fijo</th><th>Caja 2 · flotante</th><th>Caja 3 · apoyo</th></tr></thead><tbody>';
@@ -583,15 +618,16 @@
     for (let h0 = Math.floor(d.ab / 60) * 60; h0 < d.ci; h0 += 60) {
       const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
       const tk = dem ? C.cargaHora(dem, d.cod, h0 / 60) : null;
-      const n = dem ? C.nivelCajas(tk, S.config.capacidad) : 0;
+      const n = dem ? C.nivelCajas(tk, S.config.capacidad, S.config.caja3) : 0;
       const c1 = quienesEn(d.turnos.filter((t) => t.caja === 1), a, b);
       const c2 = quienesEn(d.turnos.filter((t) => t.caja === 2), a, b);
+      const c2piso = quienesEn(Vd.piso[d.idx].filter((x) => x.nomina), a, b);
       const c3 = quienesEn(d.apoyos, a, b);
       const cub = (lista) => { let t = a; lista.slice().sort((x, y) => x.ini - y.ini).forEach((x) => { if (x.ini <= t) t = Math.max(t, x.fin); }); return t >= b; };
       h += '<tr><td class="h">' + C.aHora(a) + '–' + C.aHora(b) + '</td>';
       h += '<td>' + (dem ? '<span class="quien n' + n + '">' + n + ' caja' + (n > 1 ? 's' : '') + '</span><span class="nota">' + Math.round(tk) + ' tickets' + (conPesos(dem) ? ' · $' + Math.round(dem.importe[d.cod][h0 / 60] || 0).toLocaleString('es-MX') : '') + '</span>' : '<span class="nota">sin reporte</span>') + '</td>';
       h += '<td>' + (c1.map((t) => chip(t, detalle(t, a, b))).join('') || '') + (cub(c1) ? '' : ' <span class="falta">FALTA</span>') + '</td>';
-      h += '<td>' + (c2.map((t) => chip(t, detalle(t, a, b))).join('') || '') + (cub(c2) ? '' : ' <span class="falta">FALTA</span>') +
+      h += '<td>' + (c2.map((t) => chip(t, detalle(t, a, b))).join('') || '') + c2piso.map((t) => chip(t, detalle(t, a, b) + '<span class="nota">de piso: entra si hay fila</span>')).join('') + (cub(c2.concat(c2piso)) ? '' : ' <span class="falta">FALTA</span>') +
         (dem && c2.length ? '<span class="nota">' + (n >= 2 ? 'se queda cobrando' : 'puede estar en piso') + '</span>' : '') + '</td>';
       h += '<td>' + (c3.length ? c3.map((t) => (t.nomina ? chip(t) : '<span class="falta">SIN NADIE EN PISO</span>')).join('') : (n === 3 ? '<span class="falta">ABRIR</span>' : '<span class="nota">cerrada</span>')) + '</td></tr>';
     }
@@ -637,6 +673,12 @@
       aoa.push(fila);
       altos.push(34);
     });
+    if (V.piso.some((l) => l.some((x) => x.nomina))) {
+      const r = aoa.length + 1;
+      aoa.push(['CAJA 2 DE PISO (entra si hay fila)'].concat(rol.dias.map((d) => V.piso[d.idx].filter((x) => x.nomina).map((x) => C.rangoCorto(x.ini, x.fin) + ' ' + nombre(x.nomina)).join('\n'))).concat(['']));
+      for (let i = 0; i < 9; i++) est[col(i) + r] = Object.assign({ bold: true, fill: '#FFF2CC', color: '#6B4A00' }, borde);
+      altos.push(Math.max(30, 15 * Math.max(1, ...rol.dias.map((d) => V.piso[d.idx].filter((x) => x.nomina).length))));
+    }
     if (V.huecos.length) {
       const r = aoa.length + 1;
       aoa.push(['SIN CUBRIR'].concat(rol.dias.map((d) => V.huecos.filter((x) => x.dia === d.idx).map((x) => 'C' + x.caja + ' ' + C.rangoCorto(x.ini, x.fin)).join('\n'))).concat(['']));
@@ -648,7 +690,7 @@
     for (let i = 0; i < 9; i++) est[col(i) + r3] = Object.assign({ bold: true, fill: '#FDE2C4', color: '#7A3D00' }, borde);
     altos.push(Math.max(30, 15 * Math.max(1, ...rol.dias.map((d) => d.apoyos.length))));
     aoa.push([]);
-    aoa.push(['C1 = Cajero fijo, nunca deja la caja · C2 = Cajero flotante, apoya en piso y regresa a cobrar cuando se junta fila · C3 = Apoyo solo en horas pico · Mantenerse comunicados por radio.']);
+    aoa.push(['C1 = Cajero fijo, nunca deja la caja · C2 = Cajero flotante, apoya en piso y regresa a cobrar cuando se junta fila · C2 de piso = vendedor en piso que entra a cobrar si se junta fila (no cuenta en sus días) · C3 = Apoyo solo en horas pico · Mantenerse comunicados por radio.']);
 
     // hoja por hora
     const dem = S.ventas ? S.ventas.demanda : null;
@@ -658,8 +700,8 @@
         const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
         const nm = (l) => quienesEn(l, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ') || 'FALTA';
         const tk = dem ? C.cargaHora(dem, d.cod, h0 / 60) : '';
-        porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad) : '', dem ? Math.round(tk * 10) / 10 : '', conPesos(dem) ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
-          nm(d.turnos.filter((t) => t.caja === 1)), nm(d.turnos.filter((t) => t.caja === 2)), quienesEn(d.apoyos, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ')]);
+        porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad, S.config.caja3) : '', dem ? Math.round(tk * 10) / 10 : '', conPesos(dem) ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
+          nm(d.turnos.filter((t) => t.caja === 1)), quienesEn(d.turnos.filter((t) => t.caja === 2), a, b).length ? nm(d.turnos.filter((t) => t.caja === 2)) : (quienesEn(V.piso[d.idx].filter((x) => x.nomina), a, b).map((x) => nombre(x.nomina) + ' (de piso)').join(' / ') || 'FALTA'), quienesEn(d.apoyos, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ')]);
       }
     });
     const resumen = [['Vendedor', 'Nómina', 'Días C1/C2', 'Turnos C1', 'Turnos C2', 'Horas en caja', 'Cierres', 'Fin de semana', 'Apoyos C3', 'Marcado esta semana']];

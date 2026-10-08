@@ -44,7 +44,11 @@
       // (unos 40 por hora), pero los clientes llegan en grupos: en el histórico de Ferre Mina
       // la tienda ya abre la segunda caja en más de la mitad de las horas con 15 a 20 tickets.
       capacidad: 20,
-      version: 2,
+      // Tickets por hora desde los que se abre la Caja 3 de apoyo. Con dos cajas cobrando a su
+      // máximo real (en el histórico, una caja casi nunca pasa de 28 a 29 por hora) se atienden
+      // unos 55; arriba de eso se junta fila aunque estén las dos.
+      caja3: 55,
+      version: 3,
       maxDias: 3, // días máximos en Caja 1 / Caja 2 por vendedor
       turnoMin: 3, // horas
       turnoMax: 6, // horas
@@ -343,9 +347,14 @@
     return t || 0;
   }
 
-  function nivelCajas(tickets, capacidad) {
+  // 1, 2 o 3 cajas. Con umbral de Caja 3 (caja3): 3 solo desde ese número de tickets por hora.
+  // Sin él (versiones anteriores) se usa el doble de la capacidad.
+  function nivelCajas(tickets, capacidad, caja3) {
     if (!tickets) return 1;
-    return Math.max(1, Math.min(3, Math.ceil(tickets / capacidad - 1e-9)));
+    const n = Math.max(1, Math.min(3, Math.ceil(tickets / capacidad - 1e-9)));
+    if (!caja3) return n;
+    if (tickets >= caja3) return 3;
+    return Math.min(n, 2);
   }
 
   // --------------------------------------------------- armado del rol
@@ -423,7 +432,7 @@
     const semilla = numeroSemana(semana.inicio);
     const rango = {};
     elegidos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, elegidos.length); });
-    const nivelHora = (dia, h) => (demanda ? nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad) : 2);
+    const nivelHora = (dia, h) => (demanda ? nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3) : 2);
 
     // Minutos de Caja 2 sin cubrir en horas que piden 2 o 3 cajas (y de Caja 1 a cualquier hora).
     function faltaImportante(dias) {
@@ -473,7 +482,7 @@
       if (!demanda) return 2;
       let m = 1;
       for (let h = Math.floor(desde / 60); h * 60 < hasta; h++) {
-        m = Math.max(m, nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad));
+        m = Math.max(m, nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3));
       }
       return m;
     }
@@ -489,7 +498,7 @@
     function carga(dia) {
       if (!demanda) return PRIORIDAD_SIN_VENTAS[dia.cod] || 0;
       let k = 0;
-      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad) - 1;
+      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3) - 1;
       return k;
     }
     const ordenC2 = orden.slice().sort((a, b) => carga(b) - carga(a) || holgura(a) - holgura(b) || a.idx - b.idx);
@@ -602,7 +611,7 @@
     let actual = null;
     for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) {
       const t = cargaHora(demanda, dia.cod, h);
-      if (nivelCajas(t, config.capacidad) === 3) {
+      if (nivelCajas(t, config.capacidad, config.caja3) === 3) {
         const ini = Math.max(h * 60, dia.ab), fin = Math.min((h + 1) * 60, dia.ci);
         if (actual && actual.fin === ini) { actual.fin = fin; actual.tickets.push(t); }
         else { actual = { ini, fin, tickets: [t] }; bloques.push(actual); }
@@ -615,9 +624,66 @@
     return dia.turnos.some((t) => t.nomina === nomina && t.ini < fin && t.fin > ini);
   }
 
+  // Hasta qué hora puede alguien estar en piso desde t sin pasar de tope (t si no puede).
+  function finEnPiso(semana, dia, nomina, t, tope) {
+    const d = disponible(semana, nomina, dia.idx);
+    if (!d || d.ini > t || d.fin <= t) return t;
+    let e = Math.min(d.fin, tope);
+    for (const x of dia.turnos) {
+      if (x.nomina !== nomina || x.fin <= t || x.ini >= e) continue;
+      if (x.ini <= t) return t;
+      e = x.ini;
+    }
+    return e;
+  }
+
   function enPiso(semana, dia, nomina, ini, fin) {
     const d = disponible(semana, nomina, dia.idx);
     return !!d && d.ini <= ini && d.fin >= fin && !enCaja(dia, nomina, ini, fin);
+  }
+
+  // Caja 2 de piso: en las horas en que nadie tiene turno de Caja 2, se nombra a un vendedor
+  // que está en piso para que entre a cobrar cuando se junte fila. Así opera la tienda cuando no
+  // alcanza la gente (sobre todo en la mañana). No cuenta en sus días de caja. Se calcula cada vez
+  // a partir del rol, así que siempre va de acuerdo con los cambios hechos a mano.
+  function cajaPiso(rol, opts) {
+    const { semana, catalogo } = opts;
+    const todos = catalogo.map((p) => normNomina(p.nomina)).sort();
+    const semilla = numeroSemana(semana.inicio);
+    const rango = {}, veces = {};
+    todos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, todos.length); veces[n] = 0; });
+    return rol.dias.map((dia) => {
+      const out = [];
+      const hasta = (n, t, tope) => {
+        let f = finEnPiso(semana, dia, n, t, tope);
+        (dia.apoyos || []).forEach((x) => { if (x.nomina === n && x.fin > t && x.ini < f) f = x.ini <= t ? t : x.ini; });
+        return f;
+      };
+      libres(dia.ab, dia.ci, dia.turnos.filter((t) => t.caja === 2).sort((a, b) => a.ini - b.ini)).forEach((g) => {
+        let t = g.ini;
+        while (t < g.fin) {
+          let mejor = null;
+          todos.forEach((n) => {
+            const f = hasta(n, t, g.fin);
+            if (f <= t) return;
+            if (!mejor || f > mejor.f || (f === mejor.f && (veces[n] - veces[mejor.n] || rango[n] - rango[mejor.n]) < 0)) mejor = { n, f };
+          });
+          if (!mejor) {
+            // nadie en piso: se avanza hasta que alguien llegue o termine el hueco
+            let f = g.fin;
+            todos.forEach((n) => { const d = disponible(semana, n, dia.idx); if (d && d.ini > t && d.ini < f) f = d.ini; });
+            const ult = out[out.length - 1];
+            if (ult && !ult.nomina && ult.fin === t) ult.fin = f; else out.push({ ini: t, fin: f, nomina: null });
+            t = f;
+            continue;
+          }
+          out.push({ ini: t, fin: mejor.f, nomina: mejor.n });
+          veces[mejor.n]++;
+          t = mejor.f;
+        }
+      });
+      return out;
+    });
   }
 
   // Recalcula solo los apoyos de Caja 3; no toca Caja 1 ni Caja 2.
@@ -636,17 +702,25 @@
       dia.apoyos = [];
       horasPico(dia, demanda, config).forEach((b) => {
         const prom = Math.round(b.tickets.reduce((a, x) => a + x, 0) / b.tickets.length);
-        // Intenta con alguien que cubra todo el pico; si no, hora por hora.
-        let tramos = [{ ini: b.ini, fin: b.fin }];
-        if (!todos.some((n) => enPiso(semana, dia, n, b.ini, b.fin))) {
-          tramos = [];
-          for (let t = b.ini; t < b.fin; t += 60) tramos.push({ ini: t, fin: Math.min(t + 60, b.fin) });
+        // El pico se cubre con la menor cantidad de personas: desde cada momento se elige a quien
+        // puede quedarse más tiempo en piso (y entre ellas, a quien lleva menos apoyos).
+        const tramos = [];
+        let t = b.ini;
+        while (t < b.fin) {
+          let e = t;
+          todos.forEach((n) => { e = Math.max(e, finEnPiso(semana, dia, n, t, b.fin)); });
+          if (e <= t) e = Math.min(b.fin, (Math.floor(t / 60) + 1) * 60); // nadie en piso: se avisa por hora
+          const ult = tramos[tramos.length - 1];
+          const nadie = !todos.some((n) => enPiso(semana, dia, n, t, e));
+          if (nadie && ult && ult.nadie && ult.fin === t) ult.fin = e;
+          else tramos.push({ ini: t, fin: e, nadie });
+          t = e;
         }
         tramos.forEach((tr) => {
           const cands = todos.filter((n) => enPiso(semana, dia, n, tr.ini, tr.fin));
           cands.sort((a, c) => apoyos[a] - apoyos[c] || horasCaja[a] - horasCaja[c] || rango[a] - rango[c]);
           const elegido = cands[0] || null;
-          const base = 'Hora pico ' + dia.nombre + ' ' + rangoLargo(tr.ini, tr.fin) + ': en un día cargado se cobran ' + prom + ' tickets por hora; con ' + config.capacidad + ' tickets por caja se necesitan 3 cajas.';
+          const base = 'Hora pico ' + dia.nombre + ' ' + rangoLargo(tr.ini, tr.fin) + ': en un día cargado se cobran ' + prom + ' tickets por hora; desde ' + (config.caja3 || config.capacidad * 2) + ' por hora ni las dos cajas alcanzan y se abre la Caja 3.';
           let razon;
           if (elegido) {
             const d = disponible(semana, elegido, dia.idx);
@@ -689,7 +763,9 @@
     const huecos = [];
     const min = config.turnoMin * 60, max = config.turnoMax * 60;
     const resumen = {};
-    const r = (n) => (resumen[n] = resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, cierres: 0, finde: 0 });
+    const r = (n) => (resumen[n] = resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, piso: 0, cierres: 0, finde: 0 });
+    const piso = cajaPiso(rol, opts);
+    piso.forEach((lista) => lista.forEach((x) => { if (x.nomina) r(x.nomina).piso++; }));
     const nom = (n) => nombreDe(catalogo, n);
 
     rol.dias.forEach((dia) => {
@@ -719,7 +795,10 @@
         for (let i = 1; i < ts.length; i++) {
           if (ts[i].ini < ts[i - 1].fin) problemas.push({ dia: dia.idx, texto: dia.nombre + ' · Caja ' + caja + ': ' + nom(ts[i - 1].nomina) + ' y ' + nom(ts[i].nomina) + ' se enciman de ' + aHora(ts[i].ini) + ' a ' + aHora(Math.min(ts[i].fin, ts[i - 1].fin)) + '.' });
         }
-        libres(dia.ab, dia.ci, ts).forEach((g) => {
+        const sinCajero = libres(dia.ab, dia.ci, ts);
+        // En Caja 2, lo que cubre un vendedor de piso ya no es hueco; solo queda donde no hay nadie.
+        const faltan = caja === 1 ? sinCajero : piso[dia.idx].filter((x) => !x.nomina);
+        faltan.forEach((g) => {
           const sug = catalogo.map((p) => normNomina(p.nomina)).filter((n) => {
             const d = disponible(semana, n, dia.idx);
             return d && d.ini < g.fin && d.fin > g.ini && !porPersona[n];
@@ -731,8 +810,13 @@
             .sort((a, b) => (b.completo - a.completo) || (a.dias - b.dias));
           // Hueco de Caja 2 en horas tranquilas: según ventas basta la Caja 1.
           let tranquilo = caja === 2 && !!demanda;
-          if (tranquilo) for (let h = Math.floor(g.ini / 60); h * 60 < g.fin; h++) if (nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad) >= 2) tranquilo = false;
-          huecos.push({ dia: dia.idx, caja, ini: g.ini, fin: g.fin, sugerencias: sug, tranquilo });
+          if (tranquilo) for (let h = Math.floor(g.ini / 60); h * 60 < g.fin; h++) if (nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3) >= 2) tranquilo = false;
+          // Quién está en tienda a esa hora (para explicar por qué nadie puede cubrir).
+          const presentes = catalogo.map((p) => normNomina(p.nomina)).filter((n) => {
+            const d = disponible(semana, n, dia.idx);
+            return d && d.ini < g.fin && d.fin > g.ini;
+          }).map((n) => ({ nomina: n, dias: rol.dias.filter((x) => x.turnos.some((t) => t.nomina === n)).length, hoy: porPersona[n] ? porPersona[n][0].caja : 0 }));
+          huecos.push({ dia: dia.idx, caja, ini: g.ini, fin: g.fin, sugerencias: sug, tranquilo, presentes });
         });
       });
       dia.apoyos.forEach((a) => {
@@ -753,7 +837,7 @@
     const sinApoyo = [];
     rol.dias.forEach((d) => d.apoyos.forEach((a) => { if (!a.nomina) sinApoyo.push({ dia: d.idx, ini: a.ini, fin: a.fin }); }));
     sinApoyo.forEach((a) => problemas.push({ dia: a.dia, texto: rol.dias[a.dia].nombre + ' · Hora pico ' + rangoLargo(a.ini, a.fin) + ': no hay vendedor en piso para abrir Caja 3.' }));
-    return { problemas, huecos, resumen, sinApoyo };
+    return { problemas, huecos, resumen, sinApoyo, piso };
   }
 
   // Cuántos turnos se necesitan contra cuántos alcanzan con la gente marcada.
@@ -777,7 +861,7 @@
     configInicial, aMin, aHora, corta, rangoCorto, rangoLargo, horasTxt,
     parseFecha, parseHora, diaSemana, sumarDias, inicioSemana, fechaCorta,
     normNomina, normalizarClave, leerGirha, armarSemana, disponible,
-    procesarVentas, cargaHora, nivelCajas, horasPico,
+    procesarVentas, cargaHora, nivelCajas, horasPico, cajaPiso,
     generarRol, calcularApoyos, validarRol, capacidadSemana, nombreDe, enPiso,
   };
 });
