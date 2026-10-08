@@ -642,6 +642,50 @@
     return !!d && d.ini <= ini && d.fin >= fin && !enCaja(dia, nomina, ini, fin);
   }
 
+  // Caja 2 de piso: en las horas en que nadie tiene turno de Caja 2, se nombra a un vendedor
+  // que está en piso para que entre a cobrar cuando se junte fila. Así opera la tienda cuando no
+  // alcanza la gente (sobre todo en la mañana). No cuenta en sus días de caja. Se calcula cada vez
+  // a partir del rol, así que siempre va de acuerdo con los cambios hechos a mano.
+  function cajaPiso(rol, opts) {
+    const { semana, catalogo } = opts;
+    const todos = catalogo.map((p) => normNomina(p.nomina)).sort();
+    const semilla = numeroSemana(semana.inicio);
+    const rango = {}, veces = {};
+    todos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, todos.length); veces[n] = 0; });
+    return rol.dias.map((dia) => {
+      const out = [];
+      const hasta = (n, t, tope) => {
+        let f = finEnPiso(semana, dia, n, t, tope);
+        (dia.apoyos || []).forEach((x) => { if (x.nomina === n && x.fin > t && x.ini < f) f = x.ini <= t ? t : x.ini; });
+        return f;
+      };
+      libres(dia.ab, dia.ci, dia.turnos.filter((t) => t.caja === 2).sort((a, b) => a.ini - b.ini)).forEach((g) => {
+        let t = g.ini;
+        while (t < g.fin) {
+          let mejor = null;
+          todos.forEach((n) => {
+            const f = hasta(n, t, g.fin);
+            if (f <= t) return;
+            if (!mejor || f > mejor.f || (f === mejor.f && (veces[n] - veces[mejor.n] || rango[n] - rango[mejor.n]) < 0)) mejor = { n, f };
+          });
+          if (!mejor) {
+            // nadie en piso: se avanza hasta que alguien llegue o termine el hueco
+            let f = g.fin;
+            todos.forEach((n) => { const d = disponible(semana, n, dia.idx); if (d && d.ini > t && d.ini < f) f = d.ini; });
+            const ult = out[out.length - 1];
+            if (ult && !ult.nomina && ult.fin === t) ult.fin = f; else out.push({ ini: t, fin: f, nomina: null });
+            t = f;
+            continue;
+          }
+          out.push({ ini: t, fin: mejor.f, nomina: mejor.n });
+          veces[mejor.n]++;
+          t = mejor.f;
+        }
+      });
+      return out;
+    });
+  }
+
   // Recalcula solo los apoyos de Caja 3; no toca Caja 1 ni Caja 2.
   function calcularApoyos(rol, opts) {
     const { semana, catalogo, config, demanda } = opts;
@@ -719,7 +763,9 @@
     const huecos = [];
     const min = config.turnoMin * 60, max = config.turnoMax * 60;
     const resumen = {};
-    const r = (n) => (resumen[n] = resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, cierres: 0, finde: 0 });
+    const r = (n) => (resumen[n] = resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, piso: 0, cierres: 0, finde: 0 });
+    const piso = cajaPiso(rol, opts);
+    piso.forEach((lista) => lista.forEach((x) => { if (x.nomina) r(x.nomina).piso++; }));
     const nom = (n) => nombreDe(catalogo, n);
 
     rol.dias.forEach((dia) => {
@@ -749,7 +795,10 @@
         for (let i = 1; i < ts.length; i++) {
           if (ts[i].ini < ts[i - 1].fin) problemas.push({ dia: dia.idx, texto: dia.nombre + ' · Caja ' + caja + ': ' + nom(ts[i - 1].nomina) + ' y ' + nom(ts[i].nomina) + ' se enciman de ' + aHora(ts[i].ini) + ' a ' + aHora(Math.min(ts[i].fin, ts[i - 1].fin)) + '.' });
         }
-        libres(dia.ab, dia.ci, ts).forEach((g) => {
+        const sinCajero = libres(dia.ab, dia.ci, ts);
+        // En Caja 2, lo que cubre un vendedor de piso ya no es hueco; solo queda donde no hay nadie.
+        const faltan = caja === 1 ? sinCajero : piso[dia.idx].filter((x) => !x.nomina);
+        faltan.forEach((g) => {
           const sug = catalogo.map((p) => normNomina(p.nomina)).filter((n) => {
             const d = disponible(semana, n, dia.idx);
             return d && d.ini < g.fin && d.fin > g.ini && !porPersona[n];
@@ -788,7 +837,7 @@
     const sinApoyo = [];
     rol.dias.forEach((d) => d.apoyos.forEach((a) => { if (!a.nomina) sinApoyo.push({ dia: d.idx, ini: a.ini, fin: a.fin }); }));
     sinApoyo.forEach((a) => problemas.push({ dia: a.dia, texto: rol.dias[a.dia].nombre + ' · Hora pico ' + rangoLargo(a.ini, a.fin) + ': no hay vendedor en piso para abrir Caja 3.' }));
-    return { problemas, huecos, resumen, sinApoyo };
+    return { problemas, huecos, resumen, sinApoyo, piso };
   }
 
   // Cuántos turnos se necesitan contra cuántos alcanzan con la gente marcada.
@@ -812,7 +861,7 @@
     configInicial, aMin, aHora, corta, rangoCorto, rangoLargo, horasTxt,
     parseFecha, parseHora, diaSemana, sumarDias, inicioSemana, fechaCorta,
     normNomina, normalizarClave, leerGirha, armarSemana, disponible,
-    procesarVentas, cargaHora, nivelCajas, horasPico,
+    procesarVentas, cargaHora, nivelCajas, horasPico, cajaPiso,
     generarRol, calcularApoyos, validarRol, capacidadSemana, nombreDe, enPiso,
   };
 });

@@ -76,6 +76,7 @@ Línea de tiempo hora por hora: quién está en Caja 1, Caja 2 y el apoyo de Caj
 | Turno de 3 a 6 h, en bloques de media hora | Todos los turnos generados cumplen. |
 | Dentro del horario GIRHA | Nunca asigna fuera de su horario ni en D o NP. |
 | Reparto parejo | Prefiere a quien lleva menos días, menos cierres, menos fines de semana y menos horas. Los empates se rotan cada semana. |
+| Caja 2 de piso | Donde nadie tiene turno de Caja 2, la app nombra a un vendedor que está en piso (con horario GIRHA y sin turno de caja) para que entre a cobrar cuando se junte fila. No cuenta en sus días de caja. Se ve en la fila **CAJA 2 DE PISO**. Solo queda en rojo si no hay nadie en piso. |
 | Caja 3 = apoyo en horas pico | Sugiere a alguien en piso (con horario GIRHA y fuera de C1/C2), marcado o no, y rota a quien lleva menos apoyos. **No cuenta** en sus 3 días. Si no hay nadie en piso, lo avisa. |
 | Cambios a mano | Avisa si alguien pasa de 3 días, si un turno sale de su horario o dura más o menos de lo permitido, y si quedan menos de 2 cajas. |
 
