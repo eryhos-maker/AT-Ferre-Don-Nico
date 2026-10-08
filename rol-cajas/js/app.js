@@ -46,7 +46,10 @@
     try {
       const t = localStorage.getItem(CLAVE);
       if (t) S = Object.assign(S, JSON.parse(t));
+      // Antes la capacidad inicial era 30 tickets por caja; se bajó a 20 al revisar el cálculo con el histórico.
+      const vieja = S.config && !(S.config.version >= 2);
       S.config = Object.assign(C.configInicial(), S.config);
+      if (vieja) { if (S.config.capacidad === 30) S.config.capacidad = 20; S.config.version = 2; }
     } catch (e) { /* ignorar */ }
   }
 
@@ -324,8 +327,9 @@
     const cap = S.config.capacidad;
     const hs = C.DIAS.map((_, i) => ({ ab: C.aMin(S.config.horario[C.DIAS[i].cod].ab), ci: C.aMin(S.config.horario[C.DIAS[i].cod].ci) }));
     const h0 = Math.floor(Math.min(...hs.map((x) => x.ab)) / 60), h1 = Math.ceil(Math.max(...hs.map((x) => x.ci)) / 60);
-    let h = '<h3>¿Cuántas cajas abrir? (promedio de tickets por hora)</h3>' +
-      '<p class="leyenda"><span><span class="muestra n1"></span><b>1 caja</b>: basta Caja 1, Caja 2 en piso</span><span><span class="muestra n2"></span><b>2 cajas</b>: Caja 2 se queda cobrando</span><span><span class="muestra n3"></span><b>3 cajas</b>: pico, abrir Caja 3 con apoyo</span><span>Capacidad: ' + cap + ' tickets por caja por hora</span></p>' +
+    let h = '<h3>¿Cuántas cajas abrir? (tickets por hora en un día cargado)</h3>' +
+      '<p class="ayuda">El número de cada cuadro es lo que se cobra en esa hora en un <b>día cargado</b>: 8 de cada 10 días se cobra eso o menos. Se planea con ese número y no con el promedio, porque con el promedio la tienda queda corta la mitad de los días. Pasa el cursor por un cuadro para ver también el promedio.</p>' +
+      '<p class="leyenda"><span><span class="muestra n1"></span><b>1 caja</b>: basta Caja 1, Caja 2 en piso</span><span><span class="muestra n2"></span><b>2 cajas</b>: Caja 2 se queda cobrando</span><span><span class="muestra n3"></span><b>3 cajas</b>: pico, abrir Caja 3 con apoyo</span><span>Una caja atiende ' + cap + ' tickets por hora sin fila (se cambia en Parámetros)</span></p>' +
       '<div class="desliza"><table class="calor"><thead><tr><th class="dia">Día</th>';
     for (let x = h0; x < h1; x++) h += '<th>' + C.corta(x * 60) + '</th>';
     h += '</tr></thead><tbody>';
@@ -333,11 +337,12 @@
       h += '<tr><th class="dia">' + dia.nombre + '</th>';
       for (let x = h0; x < h1; x++) {
         const abierta = x * 60 >= hs[i].ab - 59 && x * 60 < hs[i].ci;
-        const t = d.tickets[dia.cod][x] || 0;
+        const prom = d.tickets[dia.cod][x] || 0;
+        const t = C.cargaHora(d, dia.cod, x);
         const pesos = d.importe[dia.cod][x] || 0;
         if (!abierta) { h += '<td class="n0">–</td>'; continue; }
         const n = C.nivelCajas(t, cap);
-        h += '<td class="n' + n + '" title="' + dia.nombre + ' ' + x + ':00 · ' + t.toFixed(1) + ' tickets' + (conPesos(d) ? ' · $' + Math.round(pesos).toLocaleString('es-MX') : '') + ' promedio">' + Math.round(t) + (conPesos(d) ? '<small>$' + (pesos >= 1000 ? (pesos / 1000).toFixed(1) + 'k' : Math.round(pesos)) + '</small>' : '') + '</td>';
+        h += '<td class="n' + n + '" title="' + dia.nombre + ' ' + x + ':00 · día cargado: ' + Math.round(t) + ' tickets · promedio: ' + prom.toFixed(1) + (conPesos(d) ? ' · $' + Math.round(pesos).toLocaleString('es-MX') : '') + '">' + Math.round(t) + (conPesos(d) ? '<small>$' + (pesos >= 1000 ? (pesos / 1000).toFixed(1) + 'k' : Math.round(pesos)) + '</small>' : '') + '</td>';
       }
       h += '</tr>';
     });
@@ -371,8 +376,9 @@
       '<label class="campo">Turno mínimo (horas)<input type="number" min="1" max="12" step="0.5" data-par="turnoMin" value="' + c.turnoMin + '"></label>' +
       '<label class="campo">Turno máximo (horas)<input type="number" min="1" max="12" step="0.5" data-par="turnoMax" value="' + c.turnoMax + '"></label>' +
       '<label class="campo">Bloques de<select data-par="paso"><option value="30"' + (c.paso === 30 ? ' selected' : '') + '>media hora</option><option value="60"' + (c.paso === 60 ? ' selected' : '') + '>hora completa</option></select></label>' +
-      '<label class="campo">Tickets por hora que atiende una caja<input type="number" min="1" max="500" data-par="capacidad" value="' + c.capacidad + '"></label>' +
-      '</div><div class="acciones" style="margin-top:16px"><button class="btn" type="button" id="btn-restaurar">↩️ Restaurar valores iniciales</button></div>';
+      '<label class="campo">Tickets por hora que atiende una caja sin que se haga fila<input type="number" min="1" max="500" data-par="capacidad" value="' + c.capacidad + '"></label>' +
+      '</div><p class="ayuda" style="margin-top:10px"><b>¿Por qué 20?</b> Cobrando sin parar, una caja saca unos 40 tickets por hora, pero los clientes llegan en grupos y entre uno y otro hay espera. En el año de historia, la tienda ya puso a cobrar la segunda caja en más de la mitad de las horas con 15 a 20 tickets. Si ves fila con una sola caja, baja el número; si la segunda caja se queda sin clientes, súbelo.</p>' +
+      '<div class="acciones" style="margin-top:16px"><button class="btn" type="button" id="btn-restaurar">↩️ Restaurar valores iniciales</button></div>';
   }
 
   // ------------------------------------------------------------ 6. rol
@@ -573,7 +579,7 @@
     const detalle = (t, h0, h1) => (t.ini > h0 ? '<span class="nota">desde ' + C.aHora(t.ini) + '</span>' : '') + (t.fin < h1 ? '<span class="nota">hasta ' + C.aHora(t.fin) + '</span>' : '');
     for (let h0 = Math.floor(d.ab / 60) * 60; h0 < d.ci; h0 += 60) {
       const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
-      const tk = dem ? dem.tickets[d.cod][h0 / 60] || 0 : null;
+      const tk = dem ? C.cargaHora(dem, d.cod, h0 / 60) : null;
       const n = dem ? C.nivelCajas(tk, S.config.capacidad) : 0;
       const c1 = quienesEn(d.turnos.filter((t) => t.caja === 1), a, b);
       const c2 = quienesEn(d.turnos.filter((t) => t.caja === 2), a, b);
@@ -643,12 +649,12 @@
 
     // hoja por hora
     const dem = S.ventas ? S.ventas.demanda : null;
-    const porHora = [['Día', 'Fecha', 'Hora', 'Cajas recomendadas', 'Tickets promedio', 'Venta promedio ($)', 'Caja 1', 'Caja 2', 'Caja 3 (apoyo)']];
+    const porHora = [['Día', 'Fecha', 'Hora', 'Cajas recomendadas', 'Tickets en día cargado', 'Venta promedio ($)', 'Caja 1', 'Caja 2', 'Caja 3 (apoyo)']];
     rol.dias.forEach((d) => {
       for (let h0 = Math.floor(d.ab / 60) * 60; h0 < d.ci; h0 += 60) {
         const a = Math.max(h0, d.ab), b = Math.min(h0 + 60, d.ci);
         const nm = (l) => quienesEn(l, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ') || 'FALTA';
-        const tk = dem ? dem.tickets[d.cod][h0 / 60] || 0 : '';
+        const tk = dem ? C.cargaHora(dem, d.cod, h0 / 60) : '';
         porHora.push([d.nombre, d.fecha, C.aHora(a) + '-' + C.aHora(b), dem ? C.nivelCajas(tk, S.config.capacidad) : '', dem ? Math.round(tk * 10) / 10 : '', conPesos(dem) ? Math.round(dem.importe[d.cod][h0 / 60] || 0) : '',
           nm(d.turnos.filter((t) => t.caja === 1)), nm(d.turnos.filter((t) => t.caja === 2)), quienesEn(d.apoyos, a, b).map((t) => (t.nomina ? nombre(t.nomina) : 'SIN NADIE')).join(' / ')]);
       }

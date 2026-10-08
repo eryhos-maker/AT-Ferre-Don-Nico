@@ -298,12 +298,33 @@ test('el histórico incluido tiene la forma que usa la app y marca el domingo co
   });
   assert.ok(d.info.ticketsUnicos > 100000);
   const cap = C.configInicial().capacidad;
-  assert.equal(C.nivelCajas(d.tickets.DOM[13], cap), 2);
-  assert.equal(C.nivelCajas(d.tickets.MIE[9], cap), 1);
+  const nivel = (cod, h) => C.nivelCajas(C.cargaHora(d, cod, h), cap);
+  // Se planea con el día cargado, no con el promedio
+  assert.ok(d.alto.LUN[11] > d.tickets.LUN[11]);
+  assert.equal(nivel('DOM', 13), 3); // domingo a mediodía: pico
+  assert.equal(nivel('LUN', 8), 1); // apertura: basta una caja
+  assert.equal(nivel('MIE', 9), 1);
+  // Entre semana, de 10 de la mañana a 2 de la tarde y de 5 a 8 de la noche la Caja 2 debe estar cobrando
+  ['LUN', 'MAR', 'MIE', 'JUE', 'VIE'].forEach((cod) => { [10, 11, 12, 13, 17, 18, 19].forEach((h) => assert.ok(nivel(cod, h) >= 2, cod + ' ' + h)); });
   // Sirve para armar un rol completo
   const cat = catalogo(14);
   const sem = semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, Array(7).fill(i % 2 ? '08:00-17:00' : '12:00-21:00')])));
   const { rol, v } = generar(cat, sem, { demanda: d });
   assert.equal(rol.conVentas, true);
   sinFaltas(v);
+});
+
+test('con un reporte subido se calcula el día cargado (8 de cada 10 días)', () => {
+  // 5 jueves: a las 10 se cobran 10, 12, 14, 30 y 40 tickets
+  const filas = [];
+  [10, 12, 14, 30, 40].forEach((n, i) => {
+    const fecha = C.sumarDias('2026-10-01', i * 7);
+    for (let k = 0; k < n; k++) filas.push([fecha, '10:15', 'T' + i + '-' + k, 100]);
+  });
+  const d = C.procesarVentas(filas, { fecha: 0, hora: 1, ticket: 2, importe: 3 });
+  assert.equal(d.tickets.JUE[10], 21.2); // promedio
+  assert.equal(d.alto.JUE[10], 30); // día cargado
+  assert.equal(C.cargaHora(d, 'JUE', 10), 30);
+  // Un reporte guardado con la versión anterior (sin "alto") sigue funcionando con el promedio
+  assert.equal(C.cargaHora({ tickets: d.tickets }, 'JUE', 10), 21.2);
 });
