@@ -55,6 +55,7 @@ Horario de la tienda por día, capacidad por caja (20 tickets por hora sin fila)
 - Fila roja **SIN CUBRIR**: horas sin Caja 1 o Caja 2. Tócala y verás quién puede cubrirla según su horario (aunque no esté marcado) y un botón **Asignar**.
 - Fila **APOYO CAJA 3**: horas pico con el vendedor sugerido.
 - **📊 Exportar a Excel**: rol con colores, más hojas "Por hora", "Resumen" y "Avisos".
+- **🧹 Borrar rol**: quita el rol de la semana para empezar de nuevo. **Generar rol de nuevo** con los mismos horarios, vendedores y parámetros da el mismo rol.
 - **🖨️ Imprimir / PDF**: sale en hoja carta horizontal, lista para pegar. En la ventana de impresión elige "Guardar como PDF" si quieres el archivo.
 
 ### 7 · Por día
@@ -68,7 +69,7 @@ Línea de tiempo hora por hora: quién está en Caja 1, Caja 2 y el apoyo de Caj
 |---|---|
 | Mínimo 2 cajas abiertas todo el horario | Cubre Caja 1 y Caja 2 de apertura a cierre. Si no alcanza, marca el hueco en rojo; **no inventa** a nadie. |
 | Caja 1 = cajero fijo | Se cubre primero, todos los días. |
-| Caja 2 = cajero flotante | Se cubre con la gente que queda. Si no alcanza, primero en los días de más venta (según SAP; sin reporte, sábado, domingo y viernes). |
+| Caja 2 = cajero flotante | Se cubre con la gente que queda. Si no alcanza para todo el día, primero se da a cada día un turno en sus horas más cargadas y luego se rellenan las demás horas que piden 2 cajas; las horas tranquilas (basta Caja 1) quedan al final y se marcan en amarillo. Sin ventas: primero sábado, domingo y viernes. |
 | Máx. 3 días por semana en C1/C2, 1 turno por día | No asigna un 4.º día ni dos turnos el mismo día. |
 | Turno de 3 a 6 h, en bloques de media hora | Todos los turnos generados cumplen. |
 | Dentro del horario GIRHA | Nunca asigna fuera de su horario ni en D o NP. |

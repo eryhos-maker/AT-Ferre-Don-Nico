@@ -373,6 +373,8 @@
   // horas, sin repetir persona. Si no alcanza la gente, deja huecos.
   function resolverCaja(ctx) {
     const { ab, ci, cands, min, max, paso, costo, costoHueco } = ctx;
+    const cortes = ctx.cortes || []; // horas donde cambia la necesidad de cajas
+    const maxSegs = ctx.maxSegs || Infinity; // tope de turnos (1 = solo el mejor turno del día)
     const LIMITE = 40000;
     let nodos = 0;
     let mejor = { cost: Infinity, segs: [] };
@@ -384,12 +386,12 @@
       if (t >= ci) { mejor = { cost, segs: segs.slice() }; return; }
       const opts = [];
       cands.forEach((c) => {
-        if (usados.has(c.nomina) || c.ini > t || c.fin <= t) return;
+        if (segs.length >= maxSegs || usados.has(c.nomina) || c.ini > t || c.fin <= t) return;
         const tope = Math.min(c.fin, ci, t + max);
         for (let e = tope; e >= t + min; e -= paso) {
           const resto = ci - e;
           // un resto menor al mínimo ya no se puede cubrir con otro turno
-          const castigo = resto > 0 && resto < min ? costoHueco(resto) : 0;
+          const castigo = resto > 0 && resto < min ? costoHueco(e, ci) : 0;
           opts.push({ c, e, orden: costo(c, t, e) + castigo, cost: costo(c, t, e) });
         }
       });
@@ -404,8 +406,9 @@
       // Hueco: nadie cubre desde t; se salta hasta que alguien pueda entrar.
       let sig = ci;
       cands.forEach((c) => { if (!usados.has(c.nomina) && c.ini > t && c.ini < sig) sig = c.ini; });
+      cortes.forEach((x) => { if (x > t && x < sig) sig = x; });
       if (sig <= t) sig = Math.min(ci, t + paso);
-      dfs(sig, cost + costoHueco(sig - t));
+      dfs(sig, cost + costoHueco(t, sig));
     }
     dfs(ab, 0);
     return mejor.segs;
@@ -420,6 +423,25 @@
     const semilla = numeroSemana(semana.inicio);
     const rango = {};
     elegidos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, elegidos.length); });
+    const nivelHora = (dia, h) => (demanda ? nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad) : 2);
+
+    // Minutos de Caja 2 sin cubrir en horas que piden 2 o 3 cajas (y de Caja 1 a cualquier hora).
+    function faltaImportante(dias) {
+      let f = 0;
+      dias.forEach((dia) => [1, 2].forEach((caja) => {
+        libres(dia.ab, dia.ci, dia.turnos.filter((t) => t.caja === caja).sort((a, b) => a.ini - b.ini)).forEach((g) => {
+          for (let h = Math.floor(g.ini / 60); h * 60 < g.fin; h++) {
+            const m = Math.min(g.fin, (h + 1) * 60) - Math.max(g.ini, h * 60);
+            if (caja === 1) f += m * 10; else if (nivelHora(dia, h) >= 2) f += m;
+          }
+        });
+      }));
+      return f;
+    }
+
+    // priorizar = true: cuando no alcanza la gente, la Caja 2 se pone primero en las horas que
+    // piden 2 o 3 cajas y las horas tranquilas (basta Caja 1) se cubren solo si sobra alguien.
+    function armar(priorizar) {
     const stats = {};
     catalogo.forEach((p) => { stats[normNomina(p.nomina)] = statsVacios(); });
 
@@ -472,12 +494,11 @@
     }
     const ordenC2 = orden.slice().sort((a, b) => carga(b) - carga(a) || holgura(a) - holgura(b) || a.idx - b.idx);
 
-    [1, 2].forEach((caja) => {
-      const pend = new Set(pendientes);
-      (caja === 1 ? orden : ordenC2).forEach((dia) => {
-        pend.delete(dia.idx);
+    // Cubre una caja de un día entre ab y ci con la gente que queda.
+    function cubrir(caja, dia, ab, ci, pend, maxSegs) {
+        const ahorra = priorizar && caja === 2 && !!demanda;
         const ocupados = new Set(dia.turnos.map((t) => t.nomina));
-        const cands = candidatos(dia, ocupados);
+        const cands = candidatos(dia, ocupados).map((c) => ({ nomina: c.nomina, girha: c.girha, ini: Math.max(c.ini, ab), fin: Math.min(c.fin, ci) })).filter((c) => c.fin - c.ini >= min);
         const finde = FIN_DE_SEMANA.has(dia.cod);
         const futuro = {};
         cands.forEach((c) => {
@@ -493,8 +514,20 @@
           return k + 300; // cada relevo cuesta: se prefieren turnos largos
         };
         const pesoHueco = caja === 1 ? 300 : 200;
-        const costoHueco = (mins) => mins * pesoHueco;
-        const segs = resolverCaja({ ab: dia.ab, ci: dia.ci, cands, min, max, paso, costo, costoHueco });
+        // Al priorizar, dejar sin Caja 2 una hora cuesta según lo cargada que esté:
+        // casi nada si es tranquila y más mientras más tickets se cobran.
+        const costoHueco = (a, b) => {
+          if (!ahorra) return (b - a) * pesoHueco;
+          let k = 0;
+          for (let h = Math.floor(a / 60); h * 60 < b; h++) {
+            const peso = nivelHora(dia, h) >= 2 ? pesoHueco * cargaHora(demanda, dia.cod, h) / config.capacidad : 2;
+            k += (Math.min(b, (h + 1) * 60) - Math.max(a, h * 60)) * peso;
+          }
+          return k;
+        };
+        const cortes = [];
+        if (ahorra) for (let h = Math.floor(ab / 60) + 1; h * 60 < ci; h++) cortes.push(h * 60);
+        const segs = resolverCaja({ ab, ci, cands, min, max, paso, costo, costoHueco, cortes, maxSegs });
         segs.forEach((sg) => {
           const s = stats[sg.nomina];
           const c = cands.find((x) => x.nomina === sg.nomina);
@@ -522,10 +555,40 @@
           if (sg.ini === dia.ab) s.aperturas++;
           if (finde) s.finde++;
         });
+    }
+
+    // Caja 1: todos los días, todo el horario.
+    const pend1 = new Set(pendientes);
+    orden.forEach((dia) => { pend1.delete(dia.idx); cubrir(1, dia, dia.ab, dia.ci, pend1); });
+
+    if (!(priorizar && demanda)) {
+      // Caja 2: todo el horario, primero los días más cargados.
+      const pend2 = new Set(pendientes);
+      ordenC2.forEach((dia) => { pend2.delete(dia.idx); cubrir(2, dia, dia.ab, dia.ci, pend2); });
+    } else {
+      // Caja 2 cuando no alcanza la gente:
+      // 1.ª vuelta: a cada día se le da un turno en sus horas más cargadas, para que ningún día quede sin Caja 2.
+      // 2.ª vuelta: con quien quede se rellenan los huecos, primero los días más cargados.
+      const pend2 = new Set(pendientes);
+      ordenC2.forEach((dia) => { pend2.delete(dia.idx); cubrir(2, dia, dia.ab, dia.ci, pend2, 1); });
+      ordenC2.forEach((dia) => {
+        libres(dia.ab, dia.ci, dia.turnos.filter((t) => t.caja === 2).sort((a, b) => a.ini - b.ini))
+          .filter((g) => g.fin - g.ini >= min)
+          .forEach((g) => cubrir(2, dia, g.ini, g.fin, new Set()));
       });
-    });
+    }
     dias.forEach((d) => d.turnos.sort((a, b) => a.caja - b.caja || a.ini - b.ini));
-    const rol = { semana: semana.inicio, generado: new Date().toISOString(), dias, conVentas: !!demanda, ordenConVentas: !!demanda };
+    return dias;
+    }
+
+    // Primero se intenta cubrir las dos cajas todo el día. Si aun así faltan horas que piden
+    // 2 cajas, se arma otra vez dando prioridad a esas horas y se queda el que deja menos sin cubrir.
+    let dias = armar(false), prioriza = false;
+    if (demanda && faltaImportante(dias) > 0) {
+      const alterno = armar(true);
+      if (faltaImportante(alterno) < faltaImportante(dias)) { dias = alterno; prioriza = true; }
+    }
+    const rol = { semana: semana.inicio, generado: new Date().toISOString(), dias, conVentas: !!demanda, ordenConVentas: !!demanda, prioriza };
     rol.dias.forEach((d) => { d.apoyos = []; });
     calcularApoyos(rol, { semana, catalogo, config, demanda });
     return rol;
@@ -620,6 +683,7 @@
 
   function validarRol(rol, opts) {
     const { semana, catalogo, config } = opts;
+    const demanda = opts.demanda || null;
     const seleccion = new Set((opts.seleccion || []).map(normNomina));
     const problemas = [];
     const huecos = [];
@@ -665,7 +729,10 @@
             return { nomina: n, completo: d.ini <= g.ini && d.fin >= g.fin, marcado: seleccion.has(n), dias: usa, girha: d.texto };
           }).filter((s) => s.dias < config.maxDias)
             .sort((a, b) => (b.completo - a.completo) || (a.dias - b.dias));
-          huecos.push({ dia: dia.idx, caja, ini: g.ini, fin: g.fin, sugerencias: sug });
+          // Hueco de Caja 2 en horas tranquilas: según ventas basta la Caja 1.
+          let tranquilo = caja === 2 && !!demanda;
+          if (tranquilo) for (let h = Math.floor(g.ini / 60); h * 60 < g.fin; h++) if (nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad) >= 2) tranquilo = false;
+          huecos.push({ dia: dia.idx, caja, ini: g.ini, fin: g.fin, sugerencias: sug, tranquilo });
         });
       });
       dia.apoyos.forEach((a) => {
@@ -681,7 +748,7 @@
     });
     huecos.forEach((h) => {
       const dia = rol.dias[h.dia];
-      problemas.push({ dia: h.dia, hueco: true, texto: dia.nombre + ' · Caja ' + h.caja + ' sin cubrir de ' + aHora(h.ini) + ' a ' + aHora(h.fin) + ': quedan menos de 2 cajas abiertas.' });
+      problemas.push({ dia: h.dia, hueco: true, tranquilo: !!h.tranquilo, texto: dia.nombre + ' · Caja ' + h.caja + ' sin cubrir de ' + aHora(h.ini) + ' a ' + aHora(h.fin) + (h.tranquilo ? ': hora tranquila, según ventas basta la Caja 1.' : ': quedan menos de 2 cajas abiertas.') });
     });
     const sinApoyo = [];
     rol.dias.forEach((d) => d.apoyos.forEach((a) => { if (!a.nomina) sinApoyo.push({ dia: d.idx, ini: a.ini, fin: a.fin }); }));
