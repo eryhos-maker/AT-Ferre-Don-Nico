@@ -172,6 +172,18 @@ dialog::backdrop { background: rgba(15, 25, 40, .5); }
 
 /* ---------- impresión: carta horizontal ---------- */
 @page { size: letter landscape; margin: 8mm; }
+/* carga de caja contra lo parejo */
+.carga-alta { background: #ffc7ce; color: #9c0006; }
+.carga-baja { background: #dbe7fb; color: #1f3d7a; }
+.carga-ok { color: inherit; }
+.chip-mini { display: inline-block; border-radius: 10px; padding: 1px 8px; font-size: .78rem; font-weight: 700; }
+td.cuenta small { display: block; margin-top: 3px; border-radius: 6px; padding: 1px 4px; font-size: .72rem; font-weight: 700; }
+th.cuenta small { display: block; font-weight: 500; opacity: .8; }
+table.hist td small { display: block; font-size: .75rem; }
+table.hist td.vacio { color: #9aa5b3; }
+table.hist th small { display: block; font-weight: 500; opacity: .85; }
+.imprimiendo .hoja { max-width: none; }
+
 @media print {
   body { background: #fff; font-size: 11px; }
   .barra, .no-print, .tab:not(#tab-rol), #aviso, dialog { display: none !important; }
@@ -184,5 +196,7 @@ dialog::backdrop { background: rgba(15, 25, 40, .5); }
   .celda .fantasma { display: none; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .hoja .titulo { font-size: 20px; }
-  .salto { break-before: page; }
+  .salto { display: none !important; }
+  .hoja { break-inside: avoid; page-break-inside: avoid; }
+  .rol, .rol tr, .rol td { break-inside: avoid; }
 }

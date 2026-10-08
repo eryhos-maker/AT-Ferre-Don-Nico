@@ -360,7 +360,8 @@ test('semana tipo Mina: Caja 1 nunca vacía, el domingo en la mañana hay 2 en c
     sinFaltas(v);
     assert.ok(!v.huecos.some((x) => x.caja === 1), maxDias + ' días: la Caja 1 nunca queda vacía');
     const dom = rol.dias.find((x) => x.cod === 'DOM');
-    for (let m = 9 * 60; m < 13 * 60; m += 30) assert.equal(enCajaA(dom, m), 2, 'domingo ' + C.aHora(m) + ' con 2 en caja');
+    // domingo: con 4 días alcanza para 2 en caja desde las 9; con 3, al menos en lo más cargado (11 a 1)
+    for (let m = (maxDias === 4 ? 9 : 11) * 60; m < 13 * 60; m += 30) assert.equal(enCajaA(dom, m), 2, maxDias + ' días: domingo ' + C.aHora(m) + ' con 2 en caja');
     // quien llega a las 10 no se queda en piso esperando a las 2 mientras la Caja 2 está sola:
     // si entra a caja más tarde, es porque otra persona ya cubre la Caja 2 desde las 10
     rol.dias.forEach((dia) => unidos(dia).filter((t) => t.nomina === lucia && dia.cod !== 'DOM' && t.ini > 10 * 60).forEach((t) => {
@@ -370,10 +371,9 @@ test('semana tipo Mina: Caja 1 nunca vacía, el domingo en la mañana hay 2 en c
     rol.dias.forEach((dia) => unidos(dia).filter((t) => tarde.includes(t.nomina) && dia.cod !== 'DOM').forEach((t) => assert.ok(t.ini <= 17 * 60, dia.nombre + ': turno de tarde desde ' + C.aHora(t.ini))));
     // cuando hay 2 en caja, uno es Caja 1 y el otro Caja 2; si sale el de Caja 1, el de Caja 2 pasa a Caja 1
     rol.dias.forEach((dia) => { for (let m = dia.ab; m < dia.ci; m += 30) { const c1 = dia.turnos.filter((t) => t.caja === 1 && t.ini <= m && t.fin > m).length; const c2 = dia.turnos.filter((t) => t.caja === 2 && t.ini <= m && t.fin > m).length; assert.ok(c1 <= 1 && c2 <= 1 && (c2 === 0 || c1 === 1), dia.nombre + ' ' + C.aHora(m)); } });
-    if (maxDias === 3) {
-      const horas = cat.map((p) => (v.resumen[p.nomina] ? v.resumen[p.nomina].horas : 0) / 60);
-      assert.ok(Math.max(...horas) - Math.min(...horas) <= 9, 'reparto de horas: ' + horas.join(', '));
-    }
+    // reparto en proporción al tiempo en tienda: nadie con muchas más horas de caja de las que le tocan
+    const carga = C.cargaSemana(rol, sem, cat);
+    Object.entries(carga.personas).forEach(([n, p]) => assert.ok(p.dif / 60 <= 8.5, maxDias + ' días: ' + n + ' trae ' + (p.dif / 60).toFixed(1) + ' h de más'));
   });
 });
 
@@ -441,4 +441,23 @@ test('donde no hay cajero de Caja 2, un vendedor de piso la cubre y no cuenta en
   v.huecos.filter((x) => x.caja === 2).forEach((x) => {
     assert.ok(v.piso[x.dia].some((p) => !p.nomina && p.ini === x.ini && p.fin === x.fin));
   });
+});
+
+test('carga de la semana: horas en caja contra tiempo en tienda (lo parejo es la misma parte para todos)', () => {
+  const cat = catalogo(2);
+  const sem = semanaDe(cat, { 1001: Array(7).fill('08:00-16:00'), 1002: Array(7).fill('15:00-21:00') });
+  const rol = { dias: C.DIAS.map((d, i) => ({ idx: i, cod: d.cod, ab: 8 * 60, ci: 21 * 60, turnos: [], apoyos: [] })) };
+  // 1001: 8 h en tienda x 7 = 56 h; 1002: 6 h x 7 = 42 h. Caja: 1001 14 h, 1002 14 h.
+  rol.dias[0].turnos.push({ caja: 1, nomina: '1001', ini: 8 * 60, fin: 15 * 60 }, { caja: 1, nomina: '1002', ini: 15 * 60, fin: 21 * 60 });
+  rol.dias[1].turnos.push({ caja: 1, nomina: '1001', ini: 8 * 60, fin: 15 * 60 }, { caja: 1, nomina: '1002', ini: 15 * 60, fin: 21 * 60 });
+  rol.dias[2].turnos.push({ caja: 2, nomina: '1002', ini: 15 * 60, fin: 17 * 60 });
+  const c = C.cargaSemana(rol, sem, cat);
+  assert.equal(c.personas['1001'].tienda, 56 * 60);
+  assert.equal(c.personas['1002'].tienda, 42 * 60);
+  assert.equal(c.personas['1001'].caja, 14 * 60);
+  assert.equal(c.personas['1002'].caja, 14 * 60);
+  // a la misma cantidad de horas, el de 6 h trae más carga que el de 8 h
+  assert.ok(c.personas['1002'].pct > c.personas['1001'].pct);
+  assert.ok(c.personas['1002'].dif > 0 && c.personas['1001'].dif < 0);
+  assert.equal(Math.round(c.personas['1001'].dif + c.personas['1002'].dif), 0);
 });

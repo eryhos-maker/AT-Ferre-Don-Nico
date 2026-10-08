@@ -508,8 +508,18 @@
       for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += cargaHora(demanda, dia.cod, h);
       return k;
     };
-    // Horas de caja que le tocarían a cada quien si se repartieran parejo (dos cajas todo el día).
-    const meta = diasBase.reduce((a, d) => a + 2 * (d.ci - d.ab), 0) / 60 / Math.max(1, elegidos.length);
+    // Horas de caja que le tocarían a cada quien, en proporción a su tiempo en tienda:
+    // quien está 8 horas debe tener más caja que quien está 6.
+    const pideTotal = diasBase.reduce((a, d) => {
+      let k = 0;
+      for (let h = Math.floor(d.ab / 60); h * 60 < d.ci; h++) k += (Math.min(d.ci, (h + 1) * 60) - Math.max(d.ab, h * 60)) * (nivelHora(d, h) >= 2 ? 2 : 1.3);
+      return a + k;
+    }, 0);
+    const enTienda = {};
+    elegidos.forEach((n) => { enTienda[n] = minutosEnTienda(semana, n, diasBase); });
+    const sumaTienda = elegidos.reduce((a, n) => a + enTienda[n], 0) || 1;
+    const meta = {};
+    elegidos.forEach((n) => { meta[n] = pideTotal * enTienda[n] / sumaTienda / 60; });
 
     // soloC1: arma solo lo mínimo para que la Caja 1 nunca quede vacía (sirve para apartar gente).
     // reservas[día] = quiénes hacen falta ese día para la Caja 1; no se les gastan días antes.
@@ -551,7 +561,7 @@
         const s = stats[c.nomina];
         let k = s.dias * 700 + (s.horas / 60) * 90 + rango[c.nomina];
         // Pasarse de las horas que le tocarían cuesta cada vez más: así no carga uno con 24 h y otro con 6.
-        const pasa = Math.max(0, (s.horas + fin - ini) / 60 - meta);
+        const pasa = Math.max(0, (s.horas + fin - ini) / 60 - meta[c.nomina]);
         k += pasa * pasa * 120 + pasa * 250;
         if (fin === dia.ci) k += s.cierres * 200;
         if (ini === dia.ab) k += s.aperturas * 120;
@@ -614,8 +624,9 @@
         }
         faltaC1.push(sinCaja);
       });
-      const horas = elegidos.filter((n) => semana.personas[n].dias.some((d) => d.estado === 'TRABAJA')).map((n) => r.stats[n].horas / 60);
-      if (horas.length) k += (Math.max(...horas) - Math.min(...horas)) * 400;
+      // diferencia contra lo que le toca a cada quien por su tiempo en tienda
+      const dif = elegidos.filter((n) => enTienda[n] > 0).map((n) => r.stats[n].horas / 60 - meta[n]);
+      if (dif.length) k += (Math.max(...dif) - Math.min(...dif)) * 400;
       return { k, faltaC1 };
     }
 
@@ -670,6 +681,39 @@
 
   function enCaja(dia, nomina, ini, fin) {
     return dia.turnos.some((t) => t.nomina === nomina && t.ini < fin && t.fin > ini);
+  }
+
+  // Minutos que la persona está en tienda en la semana (su horario GIRHA dentro del horario de la tienda).
+  function minutosEnTienda(semana, n, dias) {
+    let m = 0;
+    dias.forEach((d) => {
+      const g = disponible(semana, n, d.idx);
+      if (g) m += Math.max(0, Math.min(g.fin, d.ci) - Math.max(g.ini, d.ab));
+    });
+    return m;
+  }
+
+  // Carga de caja de la semana por persona: horas en caja, horas en tienda y qué parte de su tiempo
+  // en tienda pasa en caja. Lo parejo es que todos pasen la misma parte (así los de 8 h tienen más
+  // horas de caja que los de 6 h). "dif" = horas de más (+) o de menos (−) contra lo parejo.
+  function cargaSemana(rol, semana, catalogo) {
+    const personas = {};
+    let caja = 0, tienda = 0;
+    catalogo.map((p) => normNomina(p.nomina)).forEach((n) => {
+      if (!semana.personas[n]) return;
+      const t = minutosEnTienda(semana, n, rol.dias);
+      let c = 0;
+      rol.dias.forEach((d) => d.turnos.forEach((x) => { if (x.nomina === n) c += x.fin - x.ini; }));
+      if (!t && !c) return;
+      personas[n] = { caja: c, tienda: t };
+      caja += c; tienda += t;
+    });
+    const parte = tienda ? caja / tienda : 0;
+    Object.values(personas).forEach((p) => {
+      p.pct = p.tienda ? p.caja / p.tienda : 0;
+      p.dif = p.caja - parte * p.tienda;
+    });
+    return { personas, parte };
   }
 
   // Hasta qué hora puede alguien estar en piso desde t sin pasar de tope (t si no puede).
@@ -918,7 +962,7 @@
     configInicial, aMin, aHora, corta, rangoCorto, rangoLargo, horasTxt,
     parseFecha, parseHora, diaSemana, sumarDias, inicioSemana, fechaCorta,
     normNomina, normalizarClave, leerGirha, armarSemana, disponible,
-    procesarVentas, cargaHora, nivelCajas, horasPico, cajaPiso,
+    procesarVentas, cargaHora, nivelCajas, horasPico, cajaPiso, cargaSemana, minutosEnTienda,
     generarRol, calcularApoyos, validarRol, capacidadSemana, nombreDe, enPiso,
   };
 });

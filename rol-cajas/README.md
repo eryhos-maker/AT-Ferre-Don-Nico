@@ -58,10 +58,16 @@ Horario de la tienda por día, capacidad por caja (20 tickets por hora sin fila)
 - Fila **APOYO CAJA 3**: horas pico con el vendedor sugerido.
 - **📊 Exportar a Excel**: rol con colores, más hojas "Por hora", "Resumen" y "Avisos".
 - **🧹 Borrar rol**: quita el rol de la semana para empezar de nuevo. **Generar rol de nuevo** con los mismos horarios, vendedores y parámetros da el mismo rol.
-- **🖨️ Imprimir / PDF**: sale en hoja carta horizontal, lista para pegar. En la ventana de impresión elige "Guardar como PDF" si quieres el archivo.
+- **🖨️ Imprimir / PDF (1 hoja)**: el rol sale completo en **una sola hoja carta horizontal** (se encoge lo necesario), listo para compartir o pegar. En la ventana de impresión elige "Guardar como PDF" si quieres el archivo.
 
 ### 7 · Por día
 Línea de tiempo hora por hora: quién está en Caja 1, Caja 2 y el apoyo de Caja 3, con las ventas de esa hora.
+
+### 8 · Historial
+- Cada vez que generas o cambias un rol, la semana se guarda aquí.
+- Lo parejo es que todos pasen en caja **la misma parte de su tiempo en tienda**: quien está 8 horas tiene más horas de caja que quien está 6, en proporción.
+- Cada cuadro trae horas de caja, qué parte de su tiempo en tienda fue y cuántas horas trae de más o de menos. Rojo: más de 2 h arriba. Azul: más de 2 h abajo. La última columna es el acumulado.
+- El historial va dentro del **catálogo exportado**: expórtalo cada semana para no perderlo.
 
 ---
 
