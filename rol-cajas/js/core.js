@@ -380,47 +380,75 @@
 
   // Busca la mejor forma de cubrir una caja un día, en tramos de min–max
   // horas, sin repetir persona. Si no alcanza la gente, deja huecos.
-  function resolverCaja(ctx) {
-    const { ab, ci, cands, min, max, paso, costo, costoHueco } = ctx;
-    const cortes = ctx.cortes || []; // horas donde cambia la necesidad de cajas
-    const maxSegs = ctx.maxSegs || Infinity; // tope de turnos (1 = solo el mejor turno del día)
-    const LIMITE = 40000;
+  // Arma el día completo pensando en cuántas personas hay en caja a cada hora, no en dos cajas
+  // por separado: con 1 persona está abierta la Caja 1; con 2, también la Caja 2. Así, por ejemplo,
+  // quien llega a las 10 entra de una vez como Caja 2 y, cuando sale el de la mañana, pasa a Caja 1.
+  // ctx.falta(a, b, n) = costo de tener n personas en caja (0 o 1) entre a y b.
+  function resolverDia(ctx) {
+    const { ab, ci, cands, min, max, paso, costoTurno, falta, eventos } = ctx;
+    const LIMITE = 60000;
     let nodos = 0;
     let mejor = { cost: Infinity, segs: [] };
-    const usados = new Set();
     const segs = [];
-
-    function dfs(t, cost) {
+    const usados = new Set();
+    const finesPosibles = (c, t) => {
+      const tope = Math.min(c.fin, ci, t + max);
+      const set = new Set([tope]);
+      eventos.forEach((e) => { if (e >= t + min && e < tope) set.add(e); });
+      if (t + min <= tope) set.add(t + min);
+      return [...set].filter((e) => e >= t + min && e <= tope && (e - t) % paso === 0 || e === tope && e - t >= min).sort((a, b) => b - a);
+    };
+    function siguiente(t) {
+      let x = ci;
+      segs.forEach((s) => { if (s.fin > t && s.fin < x) x = s.fin; });
+      eventos.forEach((e) => { if (e > t && e < x) x = e; });
+      return x;
+    }
+    function dfs(t, cost, desde) {
       if (cost >= mejor.cost || ++nodos > LIMITE) return;
       if (t >= ci) { mejor = { cost, segs: segs.slice() }; return; }
-      const opts = [];
-      cands.forEach((c) => {
-        if (segs.length >= maxSegs || usados.has(c.nomina) || c.ini > t || c.fin <= t) return;
-        const tope = Math.min(c.fin, ci, t + max);
-        for (let e = tope; e >= t + min; e -= paso) {
-          const resto = ci - e;
-          // un resto menor al mínimo ya no se puede cubrir con otro turno
-          const castigo = resto > 0 && resto < min ? costoHueco(e, ci) : 0;
-          opts.push({ c, e, orden: costo(c, t, e) + castigo, cost: costo(c, t, e) });
+      const act = segs.filter((s) => s.ini <= t && s.fin > t).length;
+      if (act < 2) {
+        const opts = [];
+        cands.forEach((c, i) => {
+          if (i < desde || usados.has(c.nomina) || c.ini > t || c.fin - t < min || ci - t < Math.min(min, ci - ab)) return;
+          finesPosibles(c, t).forEach((e) => opts.push({ c, i, e, k: costoTurno(c, t, e) }));
+        });
+        opts.sort((a, b) => a.k - b.k || b.e - a.e);
+        for (const o of opts) {
+          usados.add(o.c.nomina);
+          segs.push({ nomina: o.c.nomina, ini: t, fin: o.e });
+          dfs(t, cost + o.k, o.i + 1);
+          segs.pop();
+          usados.delete(o.c.nomina);
         }
-      });
-      opts.sort((a, b) => a.orden - b.orden || (b.e - a.e));
-      for (const o of opts) {
-        usados.add(o.c.nomina);
-        segs.push({ nomina: o.c.nomina, ini: t, fin: o.e });
-        dfs(o.e, cost + o.cost);
-        segs.pop();
-        usados.delete(o.c.nomina);
       }
-      // Hueco: nadie cubre desde t; se salta hasta que alguien pueda entrar.
-      let sig = ci;
-      cands.forEach((c) => { if (!usados.has(c.nomina) && c.ini > t && c.ini < sig) sig = c.ini; });
-      cortes.forEach((x) => { if (x > t && x < sig) sig = x; });
-      if (sig <= t) sig = Math.min(ci, t + paso);
-      dfs(sig, cost + costoHueco(t, sig));
+      const t2 = siguiente(t);
+      dfs(t2, cost + falta(t, t2, Math.min(2, act)), 0);
     }
-    dfs(ab, 0);
+    dfs(ab, 0, 0);
     return mejor.segs;
+  }
+
+  // Pone la etiqueta de caja: el primero en llegar es Caja 1 (fijo) y el segundo, Caja 2 (flotante).
+  // Cuando sale el de Caja 1, el de Caja 2 pasa a Caja 1 y la Caja 2 queda para piso.
+  function etiquetarCajas(personas) {
+    const out = [];
+    const ev = [];
+    personas.forEach((p) => { ev.push({ t: p.ini, tipo: 1, p }); ev.push({ t: p.fin, tipo: 0, p }); });
+    ev.sort((a, b) => a.t - b.t || a.tipo - b.tipo);
+    let c1 = null, c2 = null;
+    const abrir = (p, caja, t) => { p.actual = { caja, nomina: p.nomina, ini: t, fin: null }; out.push(p.actual); };
+    ev.forEach((e) => {
+      if (e.tipo === 0) {
+        e.p.actual.fin = e.t;
+        if (c1 === e.p) {
+          c1 = null;
+          if (c2) { c2.actual.fin = e.t; c1 = c2; c2 = null; abrir(c1, 1, e.t); }
+        } else if (c2 === e.p) c2 = null;
+      } else if (!c1) { c1 = e.p; abrir(e.p, 1, e.t); } else { c2 = e.p; abrir(e.p, 2, e.t); }
+    });
+    return out.filter((s) => s.fin > s.ini);
   }
 
   function generarRol(opts) {
@@ -433,171 +461,202 @@
     const rango = {};
     elegidos.forEach((n, i) => { rango[n] = (i + semilla) % Math.max(1, elegidos.length); });
     const nivelHora = (dia, h) => (demanda ? nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3) : 2);
-
-    // Minutos de Caja 2 sin cubrir en horas que piden 2 o 3 cajas (y de Caja 1 a cualquier hora).
-    function faltaImportante(dias) {
-      let f = 0;
-      dias.forEach((dia) => [1, 2].forEach((caja) => {
-        libres(dia.ab, dia.ci, dia.turnos.filter((t) => t.caja === caja).sort((a, b) => a.ini - b.ini)).forEach((g) => {
-          for (let h = Math.floor(g.ini / 60); h * 60 < g.fin; h++) {
-            const m = Math.min(g.fin, (h + 1) * 60) - Math.max(g.ini, h * 60);
-            if (caja === 1) f += m * 10; else if (nivelHora(dia, h) >= 2) f += m;
-          }
-        });
-      }));
-      return f;
-    }
-
-    // priorizar = true: cuando no alcanza la gente, la Caja 2 se pone primero en las horas que
-    // piden 2 o 3 cajas y las horas tranquilas (basta Caja 1) se cubren solo si sobra alguien.
-    function armar(priorizar) {
-    const stats = {};
-    catalogo.forEach((p) => { stats[normNomina(p.nomina)] = statsVacios(); });
-
-    const dias = DIAS.map((d, i) => {
+    // Sin nadie en caja: muy caro. Con una sola persona: caro en horas que piden 2 cajas
+    // (más mientras más tickets), barato en horas tranquilas.
+    const falta = (dia, a, b, n, soloC1) => {
+      if (n >= 2 || (soloC1 && n >= 1)) return 0;
+      let k = 0;
+      for (let h = Math.floor(a / 60); h * 60 < b; h++) {
+        const m = Math.min(b, (h + 1) * 60) - Math.max(a, h * 60);
+        if (n === 0) k += m * 5000; // la Caja 1 vacía nunca se cambia por cubrir la Caja 2
+        else if (!demanda) k += m * 200;
+        else k += m * (nivelHora(dia, h) >= 2 ? 200 * cargaHora(demanda, dia.cod, h) / config.capacidad : 6);
+      }
+      return k;
+    };
+    let stats = {};
+    const diasBase = DIAS.map((d, i) => {
       const { ab, ci } = horarioDia(config, i);
-      return { idx: i, cod: d.cod, nombre: d.nombre, fecha: semana.fechas[i], ab, ci, turnos: [], apoyos: [] };
+      return { idx: i, cod: d.cod, nombre: d.nombre, fecha: semana.fechas[i], ab, ci };
     });
 
-    function candidatos(dia, ocupados) {
+    function candidatos(dia, libre) {
       return elegidos.map((n) => {
         const d = disponible(semana, n, dia.idx);
-        if (!d || ocupados.has(n) || stats[n].dias >= config.maxDias) return null;
+        if (!d || libre(n) <= 0) return null;
         const ini = Math.max(d.ini, dia.ab), fin = Math.min(d.fin, dia.ci);
-        return fin - ini >= min ? { nomina: n, ini, fin, girha: d } : null;
+        return fin - ini >= Math.min(min, dia.ci - dia.ab) ? { nomina: n, ini, fin, girha: d } : null;
       }).filter(Boolean);
     }
 
-    // Días más apretados primero: poca gente disponible contra horas a cubrir.
-    function holgura(dia) {
+    // Qué tanto le falta gente al día: horas que piden 2 cajas contra horas de gente disponible.
+    function apretado(dia) {
       let oferta = 0;
       elegidos.forEach((n) => {
         const d = disponible(semana, n, dia.idx);
         if (d) oferta += Math.max(0, Math.min(d.fin, dia.ci) - Math.max(d.ini, dia.ab));
       });
-      return oferta / Math.max(1, dia.ci - dia.ab);
+      let pide = 0;
+      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) pide += 60 * (nivelHora(dia, h) >= 2 ? 2 : 1);
+      return oferta / Math.max(1, pide);
     }
-
-    function nivelDia(dia, desde, hasta) {
-      if (!demanda) return 2;
-      let m = 1;
-      for (let h = Math.floor(desde / 60); h * 60 < hasta; h++) {
-        m = Math.max(m, nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3));
-      }
-      return m;
-    }
-
-    const orden = dias.slice().sort((a, b) => holgura(a) - holgura(b) || a.idx - b.idx);
-    const pendientes = new Set(dias.map((d) => d.idx));
-
-    // Fase 1: Caja 1 todos los días (cajero fijo, lo más importante).
-    // Fase 2: Caja 2 con la gente que queda.
-    // Si hay ventas, la Caja 2 se cubre primero en los días con más horas cargadas.
-    // Sin ventas, primero sábado, domingo y viernes (los días de más venta en tienda).
+    // Primero los días más apretados; en empate, los de más venta.
     const PRIORIDAD_SIN_VENTAS = { SAB: 3, DOM: 2, VIE: 1 };
-    function carga(dia) {
+    const carga = (dia) => {
       if (!demanda) return PRIORIDAD_SIN_VENTAS[dia.cod] || 0;
       let k = 0;
-      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += nivelCajas(cargaHora(demanda, dia.cod, h), config.capacidad, config.caja3) - 1;
+      for (let h = Math.floor(dia.ab / 60); h * 60 < dia.ci; h++) k += cargaHora(demanda, dia.cod, h);
       return k;
-    }
-    const ordenC2 = orden.slice().sort((a, b) => carga(b) - carga(a) || holgura(a) - holgura(b) || a.idx - b.idx);
+    };
+    // Horas de caja que le tocarían a cada quien, en proporción a su tiempo en tienda:
+    // quien está 8 horas debe tener más caja que quien está 6.
+    const pideTotal = diasBase.reduce((a, d) => {
+      let k = 0;
+      for (let h = Math.floor(d.ab / 60); h * 60 < d.ci; h++) k += (Math.min(d.ci, (h + 1) * 60) - Math.max(d.ab, h * 60)) * (nivelHora(d, h) >= 2 ? 2 : 1.3);
+      return a + k;
+    }, 0);
+    const enTienda = {};
+    elegidos.forEach((n) => { enTienda[n] = minutosEnTienda(semana, n, diasBase); });
+    const sumaTienda = elegidos.reduce((a, n) => a + enTienda[n], 0) || 1;
+    const meta = {};
+    elegidos.forEach((n) => { meta[n] = pideTotal * enTienda[n] / sumaTienda / 60; });
 
-    // Cubre una caja de un día entre ab y ci con la gente que queda.
-    function cubrir(caja, dia, ab, ci, pend, maxSegs) {
-        const ahorra = priorizar && caja === 2 && !!demanda;
-        const ocupados = new Set(dia.turnos.map((t) => t.nomina));
-        const cands = candidatos(dia, ocupados).map((c) => ({ nomina: c.nomina, girha: c.girha, ini: Math.max(c.ini, ab), fin: Math.min(c.fin, ci) })).filter((c) => c.fin - c.ini >= min);
-        const finde = FIN_DE_SEMANA.has(dia.cod);
-        const futuro = {};
+    // soloC1: arma solo lo mínimo para que la Caja 1 nunca quede vacía (sirve para apartar gente).
+    // reservas[día] = quiénes hacen falta ese día para la Caja 1; no se les gastan días antes.
+    function armar(orden, soloC1, reservas) {
+    stats = {};
+    catalogo.forEach((p) => { stats[normNomina(p.nomina)] = statsVacios(); });
+    const dias = diasBase.map((d) => Object.assign({}, d, { turnos: [], apoyos: [] }));
+    const pendientes = new Set(dias.map((d) => d.idx));
+
+    orden.map((x) => dias[x.idx]).forEach((dia) => {
+      pendientes.delete(dia.idx);
+      const apartados = (n) => (reservas ? [...pendientes].filter((i) => reservas[i].has(n)).length : 0);
+      const cands = candidatos(dia, (n) => config.maxDias - stats[n].dias - apartados(n));
+      const finde = FIN_DE_SEMANA.has(dia.cod);
+      const futuro = {};
+      cands.forEach((c) => { futuro[c.nomina] = [...pendientes].filter((i) => disponible(semana, c.nomina, i)).length; });
+      // Reserva: en los días que faltan, ¿a qué hora sería esta persona de las pocas disponibles?
+      // Por ejemplo, de 2 a 3:30 solo están los de medio día: conviene no gastarles días antes.
+      const libresDe = (n) => config.maxDias - stats[n].dias - apartados(n);
+      const reserva = {};
+      cands.forEach((c) => { reserva[c.nomina] = 0; });
+      [...pendientes].forEach((i) => {
+        const dd = dias[i];
+        const presentes = elegidos.filter((n) => libresDe(n) > 0 && disponible(semana, n, i));
         cands.forEach((c) => {
-          futuro[c.nomina] = [...pend].filter((i) => disponible(semana, c.nomina, i)).length;
-        });
-        const costo = (c, ini, fin) => {
-          const s = stats[c.nomina];
-          let k = s.dias * 1000 + (s.horas / 60) * 15 + s['c' + caja] * 60 + rango[c.nomina];
-          if (fin === dia.ci) k += s.cierres * 250;
-          if (ini === dia.ab) k += s.aperturas * 120;
-          if (finde) k += s.finde * 250;
-          k += futuro[c.nomina] * 40; // usar antes a quien tiene menos días libres después
-          return k + 300; // cada relevo cuesta: se prefieren turnos largos
-        };
-        const pesoHueco = caja === 1 ? 300 : 200;
-        // Al priorizar, dejar sin Caja 2 una hora cuesta según lo cargada que esté:
-        // casi nada si es tranquila y más mientras más tickets se cobran.
-        const costoHueco = (a, b) => {
-          if (!ahorra) return (b - a) * pesoHueco;
-          let k = 0;
-          for (let h = Math.floor(a / 60); h * 60 < b; h++) {
-            const peso = nivelHora(dia, h) >= 2 ? pesoHueco * cargaHora(demanda, dia.cod, h) / config.capacidad : 2;
-            k += (Math.min(b, (h + 1) * 60) - Math.max(a, h * 60)) * peso;
+          const dc = disponible(semana, c.nomina, i);
+          if (!dc) return;
+          let peor = 0;
+          for (let m = dd.ab; m < dd.ci; m += 30) {
+            if (dc.ini > m || dc.fin <= m) continue;
+            const n = presentes.filter((x) => { const d = disponible(semana, x, i); return d.ini <= m && d.fin > m; }).length;
+            if (n) peor = Math.max(peor, 1 / n);
           }
-          return k;
-        };
-        const cortes = [];
-        if (ahorra) for (let h = Math.floor(ab / 60) + 1; h * 60 < ci; h++) cortes.push(h * 60);
-        const segs = resolverCaja({ ab, ci, cands, min, max, paso, costo, costoHueco, cortes, maxSegs });
-        segs.forEach((sg) => {
-          const s = stats[sg.nomina];
-          const c = cands.find((x) => x.nomina === sg.nomina);
-          const alternos = cands
-            .filter((x) => x.nomina !== sg.nomina && !segs.some((o) => o.nomina === x.nomina) && x.ini <= sg.ini && x.fin > sg.ini)
-            .map((x) => nombreDe(catalogo, x.nomina) + ' (' + stats[x.nomina].dias + '/' + config.maxDias + ')');
-          const razon = [
-            (caja === 1 ? 'Caja 1 – cajero fijo, no deja la caja.' : 'Caja 2 – cajero flotante: apoya en piso y regresa a cobrar cuando se junta fila.'),
-            dia.nombre + ' ' + rangoLargo(sg.ini, sg.fin) + ' (' + horasTxt(sg.fin - sg.ini) + ').',
-            'Su horario GIRHA ese día es ' + rangoLargo(c.girha.ini, c.girha.fin) + ': el turno queda dentro.',
-            'Al asignarlo llevaba ' + s.dias + ' de ' + config.maxDias + ' días en caja, ' + s.cierres + ' cierre(s) y ' + s.finde + ' fin(es) de semana.',
-            alternos.length
-              ? 'También podían entrar a esa hora: ' + alternos.join(', ') + '. Se eligió a quien llevaba menos días, cierres, fines de semana y horas.'
-              : 'Era la única persona marcada disponible para cubrir desde esa hora.',
-          ];
-          if (caja === 2 && demanda) {
-            const n = nivelDia(dia, sg.ini, sg.fin);
-            razon.push(n >= 2 ? 'Según ventas, en este horario hay horas en amarillo o rojo: la Caja 2 debe quedarse cobrando en esas horas.' : 'Según ventas, este horario es tranquilo (verde): la Caja 2 puede estar en piso y regresar si se junta fila.');
-          }
-          dia.turnos.push({ caja, nomina: sg.nomina, ini: sg.ini, fin: sg.fin, razon: razon.join('\n'), manual: false });
-          s.dias++;
-          s.horas += sg.fin - sg.ini;
-          s['c' + caja]++;
-          if (sg.fin === dia.ci) s.cierres++;
-          if (sg.ini === dia.ab) s.aperturas++;
-          if (finde) s.finde++;
+          reserva[c.nomina] += peor / Math.max(1, libresDe(c.nomina));
         });
-    }
-
-    // Caja 1: todos los días, todo el horario.
-    const pend1 = new Set(pendientes);
-    orden.forEach((dia) => { pend1.delete(dia.idx); cubrir(1, dia, dia.ab, dia.ci, pend1); });
-
-    if (!(priorizar && demanda)) {
-      // Caja 2: todo el horario, primero los días más cargados.
-      const pend2 = new Set(pendientes);
-      ordenC2.forEach((dia) => { pend2.delete(dia.idx); cubrir(2, dia, dia.ab, dia.ci, pend2); });
-    } else {
-      // Caja 2 cuando no alcanza la gente:
-      // 1.ª vuelta: a cada día se le da un turno en sus horas más cargadas, para que ningún día quede sin Caja 2.
-      // 2.ª vuelta: con quien quede se rellenan los huecos, primero los días más cargados.
-      const pend2 = new Set(pendientes);
-      ordenC2.forEach((dia) => { pend2.delete(dia.idx); cubrir(2, dia, dia.ab, dia.ci, pend2, 1); });
-      ordenC2.forEach((dia) => {
-        libres(dia.ab, dia.ci, dia.turnos.filter((t) => t.caja === 2).sort((a, b) => a.ini - b.ini))
-          .filter((g) => g.fin - g.ini >= min)
-          .forEach((g) => cubrir(2, dia, g.ini, g.fin, new Set()));
       });
-    }
-    dias.forEach((d) => d.turnos.sort((a, b) => a.caja - b.caja || a.ini - b.ini));
-    return dias;
+      // Reparto parejo: pesa más a quien ya lleva días y horas de caja.
+      const costoTurno = (c, ini, fin) => {
+        const s = stats[c.nomina];
+        let k = s.dias * 700 + (s.horas / 60) * 90 + rango[c.nomina];
+        // Pasarse de las horas que le tocarían cuesta cada vez más: así no carga uno con 24 h y otro con 6.
+        const pasa = Math.max(0, (s.horas + fin - ini) / 60 - meta[c.nomina]);
+        k += pasa * pasa * 120 + pasa * 250;
+        if (fin === dia.ci) k += s.cierres * 200;
+        if (ini === dia.ab) k += s.aperturas * 120;
+        if (finde) k += s.finde * 200;
+        k += futuro[c.nomina] * 40; // usar antes a quien tiene menos días libres después
+        k += reserva[c.nomina] * 1500; // cuidar a quien hará falta en horas donde casi no hay gente
+        k += Math.max(0, ini - c.ini) / 60 * 60; // de preferencia entra a caja cuando llega, no horas después
+        return k + 300; // cada relevo cuesta: se prefieren turnos largos
+      };
+      const eventos = new Set();
+      cands.forEach((c) => { eventos.add(c.ini); eventos.add(c.fin); });
+      for (let h = Math.floor(dia.ab / 60) + 1; h * 60 < dia.ci; h++) if ((nivelHora(dia, h) >= 2) !== (nivelHora(dia, h - 1) >= 2)) eventos.add(h * 60);
+      const ev = [...eventos].filter((e) => e > dia.ab && e < dia.ci);
+      const personas = resolverDia({ ab: dia.ab, ci: dia.ci, cands, min, max, paso, costoTurno, falta: (a, b, n) => falta(dia, a, b, n, soloC1), eventos: ev });
+      const segs = etiquetarCajas(personas.map((p) => Object.assign({}, p)));
+      personas.forEach((p) => {
+        const s = stats[p.nomina];
+        const c = cands.find((x) => x.nomina === p.nomina);
+        const suyos = segs.filter((x) => x.nomina === p.nomina);
+        const alternos = cands.filter((x) => x.nomina !== p.nomina && !personas.some((o) => o.nomina === x.nomina) && x.ini <= p.ini && x.fin > p.ini)
+          .map((x) => nombreDe(catalogo, x.nomina) + ' (' + stats[x.nomina].dias + '/' + config.maxDias + ')');
+        const razon = [
+          suyos.length > 1
+            ? 'Entra a las ' + aHora(p.ini) + ' como Caja 2 (flotante) y a las ' + aHora(suyos[1].ini) + ', cuando sale quien estaba en Caja 1, pasa a Caja 1 hasta las ' + aHora(p.fin) + '.'
+            : (suyos[0].caja === 1 ? 'Caja 1 – cajero fijo, no deja la caja.' : 'Caja 2 – cajero flotante: apoya en piso y regresa a cobrar cuando se junta fila.'),
+          dia.nombre + ' ' + rangoLargo(p.ini, p.fin) + ' (' + horasTxt(p.fin - p.ini) + ' en caja).',
+          'Su horario GIRHA ese día es ' + rangoLargo(c.girha.ini, c.girha.fin) + ': el turno queda dentro.',
+          'Al asignarlo llevaba ' + s.dias + ' de ' + config.maxDias + ' días y ' + horasTxt(s.horas) + ' en caja esta semana.',
+          alternos.length
+            ? 'También podían entrar a esa hora: ' + alternos.join(', ') + '. Se reparte para que nadie cargue con muchas más horas de caja que los demás.'
+            : 'Era la única persona marcada disponible para entrar a esa hora.',
+        ].join('\n');
+        suyos.forEach((x) => dia.turnos.push({ caja: x.caja, nomina: x.nomina, ini: x.ini, fin: x.fin, razon, manual: false }));
+        s.dias++;
+        s.horas += p.fin - p.ini;
+        suyos.forEach((x) => { s['c' + x.caja]++; });
+        if (p.fin === dia.ci) s.cierres++;
+        if (p.ini === dia.ab) s.aperturas++;
+        if (finde) s.finde++;
+      });
+      dia.turnos.sort((a, b) => a.caja - b.caja || a.ini - b.ini);
+    });
+    return { dias, stats };
     }
 
-    // Primero se intenta cubrir las dos cajas todo el día. Si aun así faltan horas que piden
-    // 2 cajas, se arma otra vez dando prioridad a esas horas y se queda el que deja menos sin cubrir.
-    let dias = armar(false), prioriza = false;
-    if (demanda && faltaImportante(dias) > 0) {
-      const alterno = armar(true);
-      if (faltaImportante(alterno) < faltaImportante(dias)) { dias = alterno; prioriza = true; }
+    // Calificación de un rol: horas sin caja (lo más grave), horas que piden 2 cajas con una sola
+    // y diferencia de horas de caja entre la gente con más y menos.
+    function calificar(r) {
+      let k = 0;
+      const faltaC1 = [];
+      r.dias.forEach((dia) => {
+        const cortes = new Set([dia.ab, dia.ci]);
+        dia.turnos.forEach((t) => { cortes.add(t.ini); cortes.add(t.fin); });
+        const cs = [...cortes].sort((a, b) => a - b);
+        let sinCaja = 0;
+        for (let i = 0; i + 1 < cs.length; i++) {
+          const n = new Set(dia.turnos.filter((t) => t.ini <= cs[i] && t.fin > cs[i]).map((t) => t.nomina)).size;
+          if (n === 0) sinCaja += cs[i + 1] - cs[i];
+          k += falta(dia, cs[i], cs[i + 1], n);
+        }
+        faltaC1.push(sinCaja);
+      });
+      // diferencia contra lo que le toca a cada quien por su tiempo en tienda
+      const dif = elegidos.filter((n) => enTienda[n] > 0).map((n) => r.stats[n].horas / 60 - meta[n]);
+      if (dif.length) k += (Math.max(...dif) - Math.min(...dif)) * 400;
+      return { k, faltaC1 };
     }
-    const rol = { semana: semana.inicio, generado: new Date().toISOString(), dias, conVentas: !!demanda, ordenConVentas: !!demanda, prioriza };
+
+    // Se prueban varios órdenes de días y se queda el mejor: primero los días más apretados, luego
+    // los de más venta, y se repite pasando al frente los días donde quedó la caja sola o vacía.
+    const base = diasBase.slice();
+    const ordenes = [
+      base.slice().sort((a, b) => apretado(a) - apretado(b) || carga(b) - carga(a) || a.idx - b.idx),
+      base.slice().sort((a, b) => carga(b) - carga(a) || a.idx - b.idx),
+    ];
+    let mejor = null;
+    // Primero se aparta a quien hace falta para la Caja 1 cada día; luego se arma el día completo.
+    const probar = (orden) => {
+      const c1 = armar(orden, true, null);
+      const reservas = c1.dias.map((d) => new Set(d.turnos.map((t) => t.nomina)));
+      const r = armar(orden, false, reservas);
+      const c = calificar(r);
+      if (!mejor || c.k < mejor.c.k) mejor = { r, c, orden };
+    };
+    ordenes.forEach(probar);
+    for (let i = 0; i < 5; i++) {
+      const faltan = mejor.orden.filter((d) => mejor.c.faltaC1[d.idx] > 0);
+      if (!faltan.length) break;
+      const antes = mejor.c.k;
+      probar(faltan.concat(mejor.orden.filter((d) => !faltan.includes(d))));
+      if (mejor.c.k >= antes) break;
+    }
+    const dias = mejor.r.dias;
+
+    const rol = { semana: semana.inicio, generado: new Date().toISOString(), dias, conVentas: !!demanda, ordenConVentas: !!demanda };
     rol.dias.forEach((d) => { d.apoyos = []; });
     calcularApoyos(rol, { semana, catalogo, config, demanda });
     return rol;
@@ -622,6 +681,39 @@
 
   function enCaja(dia, nomina, ini, fin) {
     return dia.turnos.some((t) => t.nomina === nomina && t.ini < fin && t.fin > ini);
+  }
+
+  // Minutos que la persona está en tienda en la semana (su horario GIRHA dentro del horario de la tienda).
+  function minutosEnTienda(semana, n, dias) {
+    let m = 0;
+    dias.forEach((d) => {
+      const g = disponible(semana, n, d.idx);
+      if (g) m += Math.max(0, Math.min(g.fin, d.ci) - Math.max(g.ini, d.ab));
+    });
+    return m;
+  }
+
+  // Carga de caja de la semana por persona: horas en caja, horas en tienda y qué parte de su tiempo
+  // en tienda pasa en caja. Lo parejo es que todos pasen la misma parte (así los de 8 h tienen más
+  // horas de caja que los de 6 h). "dif" = horas de más (+) o de menos (−) contra lo parejo.
+  function cargaSemana(rol, semana, catalogo) {
+    const personas = {};
+    let caja = 0, tienda = 0;
+    catalogo.map((p) => normNomina(p.nomina)).forEach((n) => {
+      if (!semana.personas[n]) return;
+      const t = minutosEnTienda(semana, n, rol.dias);
+      let c = 0;
+      rol.dias.forEach((d) => d.turnos.forEach((x) => { if (x.nomina === n) c += x.fin - x.ini; }));
+      if (!t && !c) return;
+      personas[n] = { caja: c, tienda: t };
+      caja += c; tienda += t;
+    });
+    const parte = tienda ? caja / tienda : 0;
+    Object.values(personas).forEach((p) => {
+      p.pct = p.tienda ? p.caja / p.tienda : 0;
+      p.dif = p.caja - parte * p.tienda;
+    });
+    return { personas, parte };
   }
 
   // Hasta qué hora puede alguien estar en piso desde t sin pasar de tope (t si no puede).
@@ -777,8 +869,6 @@
         if (!d || d.estado !== 'TRABAJA') q('ese día no trabaja según GIRHA (' + (d ? d.texto : 'sin horario') + ').');
         else if (t.ini < d.ini || t.fin > d.fin) q('el turno sale de su horario GIRHA (' + rangoLargo(d.ini, d.fin) + ').');
         const dur = t.fin - t.ini;
-        if (dur < min) q('dura ' + horasTxt(dur) + ', menos del mínimo de ' + config.turnoMin + ' h.');
-        if (dur > max) q('dura ' + horasTxt(dur) + ', más del máximo de ' + config.turnoMax + ' h.');
         if (t.ini < dia.ab || t.fin > dia.ci) q('sale del horario de la tienda (' + rangoLargo(dia.ab, dia.ci) + ').');
         const s = r(t.nomina);
         s.horas += dur;
@@ -788,7 +878,18 @@
       });
       Object.keys(porPersona).forEach((n) => {
         r(n).dias++;
-        if (porPersona[n].length > 1) problemas.push({ dia: dia.idx, nomina: n, texto: dia.nombre + ' · ' + nom(n) + ' tiene ' + porPersona[n].length + ' turnos de caja; solo se permite 1 por día.' });
+        // Un turno puede ir en dos tramos seguidos (entra en Caja 2 y pasa a Caja 1): cuenta como uno.
+        const tramos = porPersona[n].slice().sort((a, b) => a.ini - b.ini);
+        const unidos = [];
+        tramos.forEach((t) => { const u = unidos[unidos.length - 1]; if (u && u.fin === t.ini) u.fin = t.fin; else unidos.push({ ini: t.ini, fin: t.fin, caja: t.caja }); });
+        if (unidos.length > 1) problemas.push({ dia: dia.idx, nomina: n, texto: dia.nombre + ' · ' + nom(n) + ' tiene ' + unidos.length + ' turnos de caja; solo se permite 1 por día.' });
+        unidos.forEach((u) => {
+          const dur = u.fin - u.ini;
+          const q = (texto) => problemas.push({ dia: dia.idx, nomina: n, texto: dia.nombre + ' · ' + nom(n) + ' (' + rangoLargo(u.ini, u.fin) + '): ' + texto });
+          // Un turno más corto que el mínimo solo se permite si cubre todo lo que le queda a la tienda.
+          if (dur < min && !(dur === dia.ci - dia.ab)) q('dura ' + horasTxt(dur) + ', menos del mínimo de ' + config.turnoMin + ' h.');
+          if (dur > max) q('dura ' + horasTxt(dur) + ', más del máximo de ' + config.turnoMax + ' h.');
+        });
       });
       [1, 2].forEach((caja) => {
         const ts = dia.turnos.filter((t) => t.caja === caja).sort((a, b) => a.ini - b.ini);
@@ -861,7 +962,7 @@
     configInicial, aMin, aHora, corta, rangoCorto, rangoLargo, horasTxt,
     parseFecha, parseHora, diaSemana, sumarDias, inicioSemana, fechaCorta,
     normNomina, normalizarClave, leerGirha, armarSemana, disponible,
-    procesarVentas, cargaHora, nivelCajas, horasPico, cajaPiso,
+    procesarVentas, cargaHora, nivelCajas, horasPico, cajaPiso, cargaSemana, minutosEnTienda,
     generarRol, calcularApoyos, validarRol, capacidadSemana, nombreDe, enPiso,
   };
 });

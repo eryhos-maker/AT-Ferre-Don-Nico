@@ -14,6 +14,7 @@
     { id: 'parametros', txt: '5 · Parámetros' },
     { id: 'rol', txt: '6 · Rol' },
     { id: 'dia', txt: '7 · Por día' },
+    { id: 'historial', txt: '8 · Historial' },
   ];
 
   // ------------------------------------------------------------- estado
@@ -27,6 +28,7 @@
     ventas: null, // { nombre, demanda }
     rol: null,
     diaVista: 0,
+    historial: {}, // semana -> { personas: { nómina: { nombre, caja, tienda } } }
   };
   let G = null; // resultado de leer GIRHA con el catálogo actual
   let SEM = null; // semana armada
@@ -47,6 +49,7 @@
       const t = localStorage.getItem(CLAVE);
       if (t) S = Object.assign(S, JSON.parse(t));
       S.config = migrarConfig(S.config);
+      if (!S.historial || typeof S.historial !== 'object') S.historial = {};
     } catch (e) { /* ignorar */ }
   }
 
@@ -134,7 +137,7 @@
 
   function pintar() {
     pintarPestanas();
-    ({ personal: pintarPersonal, girha: pintarGirha, semana: pintarSemana, ventas: pintarVentas, parametros: pintarParametros, rol: pintarRol, dia: pintarDia })[S.tab]();
+    ({ personal: pintarPersonal, girha: pintarGirha, semana: pintarSemana, ventas: pintarVentas, parametros: pintarParametros, rol: pintarRol, dia: pintarDia, historial: pintarHistorial })[S.tab]();
   }
 
   // ------------------------------------------------------------ 1. personal
@@ -160,7 +163,7 @@
   }
 
   function exportarCatalogo() {
-    const datos = { tipo: 'catalogo-rol-cajas', version: 1, sucursal: 'Ferre Mina', personal: S.catalogo, parametros: S.config };
+    const datos = { tipo: 'catalogo-rol-cajas', version: 1, sucursal: 'Ferre Mina', personal: S.catalogo, parametros: S.config, historial: S.historial };
     const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -176,6 +179,7 @@
       if (!Array.isArray(lista)) throw new Error('formato');
       S.catalogo = lista.map((p, i) => ({ nomina: String(p.nomina || '').trim(), nombre: String(p.nombre || '').trim(), color: p.color || C.COLORES[i % C.COLORES.length] }));
       if (d.parametros) S.config = migrarConfig(d.parametros);
+      if (d.historial && typeof d.historial === 'object') S.historial = Object.assign({}, d.historial, S.historial);
       recalcularSemana();
       guardar(); pintar();
       aviso('Catálogo cargado: ' + S.catalogo.length + ' personas.');
@@ -278,6 +282,7 @@
     if (previo && previo.dias.some((d) => d.turnos.some((t) => t.manual) || d.apoyos.some((a) => a.manual)) &&
       !confirm('Tienes cambios hechos a mano en el rol. Si lo generas de nuevo se pierden. ¿Continuar?')) return;
     S.rol = C.generarRol(opts());
+    registrarSemana();
     guardar();
     ir('rol');
     aviso(previo ? 'Rol generado de nuevo con las ventas y parámetros actuales.' : 'Rol generado. Toca cualquier celda para ver por qué se asignó.');
@@ -403,6 +408,7 @@
     }
     const V = C.validarRol(rol, opts());
     const filas = nominasCatalogo().filter((n) => S.seleccion.includes(n) || rol.dias.some((d) => d.turnos.some((t) => t.nomina === n)));
+    const carga = C.cargaSemana(rol, SEM, S.catalogo);
     const fin = C.sumarDias(SEM.inicio, 6);
     let h = '<div class="solo-pantalla">';
     if (!V.problemas.length) h += '<div class="caja-aviso ok">✔ El rol cumple todas las reglas.</div>';
@@ -414,31 +420,35 @@
     if (!rol.conVentas || !S.ventas) h += '<div class="caja-aviso info">Sin reporte de ventas: los apoyos de Caja 3 se calculan cuando lo subas (paso 4) y presiones <b>Actualizar apoyos Caja 3</b>. Mientras tanto, si no alcanza la gente, la Caja 2 se cubre primero sábado, domingo y viernes.</div>';
     else if (!rol.ordenConVentas && V.huecos.some((x) => x.caja === 2)) h += '<div class="caja-aviso info">Ya tienes el reporte de ventas y hay horas sin Caja 2. Si presionas <b>Generar rol de nuevo</b>, la Caja 2 se cubrirá primero en los días de más venta según el reporte (se pierden los cambios hechos a mano).</div>';
     h += porQueHuecos(rol, V);
-    if (rol.prioriza) h += '<div class="caja-aviso info"><b>No alcanza la gente marcada para tener Caja 2 todo el día.</b> Por eso el rol puso la Caja 2 primero en las horas que piden 2 o 3 cajas según ventas, empezando cada día por sus horas más cargadas. En las horas sin cajero de Caja 2, la cubre un vendedor de piso que entra cuando se junta fila (fila <b>CAJA 2 DE PISO</b>).</div>';
     h += '</div>';
 
     h += '<div class="hoja"><h2 class="titulo">ROL DE CAJAS MINA</h2><p class="semana-txt">Semana del jueves ' + C.fechaCorta(SEM.inicio) + ' al miércoles ' + C.fechaCorta(fin) + '/' + fin.slice(0, 4) + '</p>';
     h += '<div class="desliza"><table class="rol"><thead><tr><th class="nombre">Vendedor</th>' +
       rol.dias.map((d) => '<th>' + d.nombre + '<small>' + C.fechaCorta(d.fecha) + ' · ' + C.rangoCorto(d.ab, d.ci) + '</small></th>').join('') +
-      '<th class="cuenta">Días</th></tr></thead><tbody>';
+      '<th class="cuenta">Días<small>horas</small></th></tr></thead><tbody>';
     filas.forEach((n) => {
       const dias = V.resumen[n] ? V.resumen[n].dias : 0;
       h += '<tr><td class="nombre">' + chipPersona(n) + '</td>';
       rol.dias.forEach((d) => {
-        const ts = d.turnos.filter((t) => t.nomina === n);
+        const ts = d.turnos.filter((t) => t.nomina === n).sort((a, b) => a.ini - b.ini);
         const err = problemasDe(V, d.idx, n).length > 0;
         const g = SEM.personas[n].dias[d.idx];
         if (ts.length) {
           const bg = color(n);
           h += '<td style="background:' + esc(bg) + ';color:' + textoSobre(bg) + '"><button type="button" class="celda' + (err ? ' error' : '') + '" data-celda="' + d.idx + '|' + esc(n) + '">' +
-            ts.map((t) => '<span class="blq">' + C.rangoCorto(t.ini, t.fin) + '</span><span class="et' + (t.caja === 2 ? ' c2' : '') + '">C' + t.caja + '</span>' + (t.manual ? ' <span class="mano" title="Editado a mano">✍️</span>' : '')).join('<br>') +
+            (ts.length > 1 && ts.every((t, i) => !i || ts[i - 1].fin === t.ini)
+              ? '<span class="blq">' + C.rangoCorto(ts[0].ini, ts[ts.length - 1].fin) + '</span>' + ts.map((t) => '<span class="et' + (t.caja === 2 ? ' c2' : '') + '">C' + t.caja + '</span>').join('→') + '<small class="cambio">C1 desde ' + C.aHora(ts[1].ini) + '</small>'
+              : ts.map((t) => '<span class="blq">' + C.rangoCorto(t.ini, t.fin) + '</span><span class="et' + (t.caja === 2 ? ' c2' : '') + '">C' + t.caja + '</span>' + (t.manual ? ' <span class="mano" title="Editado a mano">✍️</span>' : '')).join('<br>')) +
             (err ? ' ⚠️' : '') + '</button></td>';
         } else {
           const txt = g.estado === 'TRABAJA' ? '<span class="fantasma">' + C.rangoCorto(g.ini, g.fin) + '</span>' : '<span class="estado-' + g.estado + '">' + esc(g.estado === 'FALTA' ? '?' : g.texto) + '</span>';
           h += '<td' + (g.estado === 'D' || g.estado === 'NP' ? ' style="background:#eceff3"' : '') + '><button type="button" class="celda" data-celda="' + d.idx + '|' + esc(n) + '">' + txt + '</button></td>';
         }
       });
-      h += '<td class="cuenta"' + (dias > S.config.maxDias ? ' style="background:#ffc7ce;color:#9c0006;font-weight:800"' : '') + '>' + dias + '/' + S.config.maxDias + '</td></tr>';
+      const cg = carga.personas[n];
+      const mk = cg ? marcaCarga(cg.dif) : null;
+      h += '<td class="cuenta"' + (dias > S.config.maxDias ? ' style="background:#ffc7ce;color:#9c0006;font-weight:800"' : '') + '>' + dias + '/' + S.config.maxDias +
+        (cg && cg.caja ? '<small class="' + mk.cls + '" title="' + Math.round(cg.pct * 100) + '% de su tiempo en tienda (' + C.horasTxt(cg.tienda) + '); equipo ' + Math.round(carga.parte * 100) + '%">' + C.horasTxt(cg.caja) + (mk.cls === 'carga-ok' ? '' : ' · ' + mk.txt) + '</small>' : '') + '</td></tr>';
     });
     // Caja 2 de piso
     if (V.piso.some((l) => l.some((x) => x.nomina))) {
@@ -466,10 +476,15 @@
     h += '<p class="leyenda"><span><b>C1</b> Cajero fijo: nunca deja la caja.</span><span><b>C2</b> Cajero flotante: apoya en piso y regresa a cobrar cuando se junta fila.</span><span><b>C2 de piso</b> Cuando nadie tiene turno de Caja 2, este vendedor sigue en piso y entra a cobrar si se junta fila; no cuenta en sus días de caja.</span><span><b>C3</b> Apoyo solo en horas pico.</span><span>Mantenerse comunicados por radio.</span></p></div>';
 
     // resumen
-    h += '<div class="salto"><h3>Resumen por vendedor</h3><div class="desliza"><table><thead><tr><th>Vendedor</th><th class="centro">Días C1/C2</th><th class="centro">Turnos C1</th><th class="centro">Turnos C2</th><th class="centro">Horas en caja</th><th class="centro">Cierres</th><th class="centro">Fin de semana</th><th class="centro">C2 de piso</th><th class="centro">Apoyos C3</th></tr></thead><tbody>' +
+    h += '<div class="salto"><h3>Resumen por vendedor</h3><p class="ayuda">Lo parejo es que todos pasen en caja la misma parte de su tiempo en tienda (esta semana, el equipo: <b>' + Math.round(carga.parte * 100) + '%</b>). Así quien está 8 horas tiene más horas de caja que quien está 6. En <b>8 · Historial</b> ves cómo va cada quien semana por semana.</p><div class="desliza"><table><thead><tr><th>Vendedor</th><th class="centro">Días C1/C2</th><th class="centro">Turnos C1</th><th class="centro">Turnos C2</th><th class="centro">Horas en caja</th><th class="centro">Horas en tienda</th><th class="centro">Parte en caja</th><th class="centro">Contra lo parejo</th><th class="centro">Cierres</th><th class="centro">Fin de semana</th><th class="centro">C2 de piso</th><th class="centro">Apoyos C3</th></tr></thead><tbody>' +
       nominasCatalogo().filter((n) => V.resumen[n] || S.seleccion.includes(n)).map((n) => {
         const r = V.resumen[n] || { dias: 0, horas: 0, c1: 0, c2: 0, apoyos: 0, piso: 0, cierres: 0, finde: 0 };
-        return '<tr><td>' + chipPersona(n) + (S.seleccion.includes(n) ? '' : ' <small>(no marcado)</small>') + '</td><td class="centro"' + (r.dias > S.config.maxDias ? ' style="color:#9c0006;font-weight:800"' : '') + '>' + r.dias + '/' + S.config.maxDias + '</td><td class="centro">' + r.c1 + '</td><td class="centro">' + r.c2 + '</td><td class="centro">' + C.horasTxt(r.horas) + '</td><td class="centro">' + r.cierres + '</td><td class="centro">' + r.finde + '</td><td class="centro">' + (r.piso || 0) + '</td><td class="centro">' + r.apoyos + '</td></tr>';
+        return '<tr><td>' + chipPersona(n) + (S.seleccion.includes(n) ? '' : ' <small>(no marcado)</small>') + '</td><td class="centro"' + (r.dias > S.config.maxDias ? ' style="color:#9c0006;font-weight:800"' : '') + '>' + r.dias + '/' + S.config.maxDias + '</td><td class="centro">' + r.c1 + '</td><td class="centro">' + r.c2 + '</td><td class="centro">' + C.horasTxt(r.horas) + '</td>' + (() => {
+          const cg = carga.personas[n];
+          if (!cg) return '<td class="centro">—</td><td class="centro">—</td><td class="centro">—</td>';
+          const mk = marcaCarga(cg.dif);
+          return '<td class="centro">' + C.horasTxt(cg.tienda) + '</td><td class="centro">' + Math.round(cg.pct * 100) + '%</td><td class="centro"><span class="chip-mini ' + mk.cls + '">' + mk.txt + '</span></td>';
+        })() + '<td class="centro">' + r.cierres + '</td><td class="centro">' + r.finde + '</td><td class="centro">' + (r.piso || 0) + '</td><td class="centro">' + r.apoyos + '</td></tr>';
       }).join('') + '</tbody></table></div></div>';
     cuerpo.innerHTML = h;
   }
@@ -491,10 +506,11 @@
     const rol = rolVigente();
     const d = rol.dias[di];
     const g = SEM.personas[n].dias[di];
-    const ts = d.turnos.filter((t) => t.nomina === n);
+    const ts = d.turnos.filter((t) => t.nomina === n).sort((a, b) => a.ini - b.ini);
     const V = C.validarRol(rol, opts());
     const probs = problemasDe(V, di, n).concat(V.problemas.filter((p) => p.dia == null && p.nomina === n));
-    const t = ts[0];
+    // si entra en Caja 2 y pasa a Caja 1, se edita como un solo turno
+    const t = ts.length ? Object.assign({}, ts[0], { fin: ts[ts.length - 1].fin }) : null;
     let h = '<h3>' + chipPersona(n) + ' · ' + d.nombre + ' ' + C.fechaCorta(d.fecha) + '</h3>' +
       '<p>Horario GIRHA: <b>' + (g.estado === 'TRABAJA' ? C.rangoLargo(g.ini, g.fin) : esc(g.estado === 'FALTA' ? 'sin horario en el archivo' : g.texto + (g.estado === 'D' ? ' (descanso)' : g.estado === 'NP' ? ' (no programado)' : ''))) + '</b></p>';
     if (probs.length) h += '<div class="caja-aviso error"><ul>' + probs.map((p) => '<li>' + esc(p.texto) + '</li>').join('') + '</ul></div>';
@@ -517,9 +533,69 @@
       d.turnos.push({ caja, nomina: n, ini, fin, manual: true, razon: 'Asignado a mano: Caja ' + caja + ' de ' + C.aHora(ini) + ' a ' + C.aHora(fin) + '.\nLa app revisa de nuevo las reglas y avisa si algo no cuadra.' });
       d.turnos.sort((a, b) => a.caja - b.caja || a.ini - b.ini);
     }
+    registrarSemana();
     guardar(); cerrarModal(); pintar();
     const V = C.validarRol(rol, opts());
     aviso(V.problemas.length ? 'Cambio guardado. Hay ' + V.problemas.length + ' aviso(s): revísalos arriba.' : 'Cambio guardado. ✔ Todo cumple las reglas.');
+  }
+
+  // ------------------------------------------------------------ carga de caja e historial
+  // Guarda las horas de caja y de tienda de la semana del rol, para comparar semana por semana.
+  function registrarSemana() {
+    const rol = rolVigente();
+    if (!rol || !SEM) return;
+    const c = C.cargaSemana(rol, SEM, S.catalogo);
+    const personas = {};
+    Object.entries(c.personas).forEach(([n, p]) => { personas[n] = { nombre: nombre(n), caja: p.caja, tienda: p.tienda }; });
+    S.historial[SEM.inicio] = { guardado: new Date().toISOString(), personas };
+  }
+
+  // Lo parejo: todos pasan en caja la misma parte de su tiempo en tienda. Más de 2 h arriba = alto.
+  const UMBRAL_DIF = 120;
+  function marcaCarga(dif) {
+    if (dif > UMBRAL_DIF) return { cls: 'carga-alta', txt: '+' + C.horasTxt(Math.round(dif / 30) * 30) };
+    if (dif < -UMBRAL_DIF) return { cls: 'carga-baja', txt: '−' + C.horasTxt(Math.round(-dif / 30) * 30) };
+    return { cls: 'carga-ok', txt: 'parejo' };
+  }
+
+  function pintarHistorial() {
+    const cuerpo = $('#historial-cuerpo');
+    const semanas = Object.keys(S.historial).sort().slice(-8);
+    if (!semanas.length) {
+      cuerpo.innerHTML = '<div class="caja-aviso info">Todavía no hay semanas guardadas. Cada vez que generas o cambias un rol, la semana se guarda aquí. Para no perder el historial al cambiar de computadora, usa <b>💾 Exportar catálogo</b>: el historial va dentro del mismo archivo.</div>';
+      return;
+    }
+    // por semana: parte del equipo y diferencia de cada quien contra lo parejo
+    const datos = semanas.map((w) => {
+      const ps = S.historial[w].personas;
+      let caja = 0, tienda = 0;
+      Object.values(ps).forEach((p) => { caja += p.caja; tienda += p.tienda; });
+      const parte = tienda ? caja / tienda : 0;
+      return { w, ps, parte };
+    });
+    const gente = [...new Set(datos.flatMap((d) => Object.keys(d.ps)))];
+    const orden = nominasCatalogo().filter((n) => gente.includes(n)).concat(gente.filter((n) => !nominasCatalogo().includes(n)));
+    const nom = (n) => (persona(n) ? nombre(n) : (datos.map((d) => d.ps[n]).find(Boolean) || {}).nombre || 'Nómina ' + n);
+    let h = '<p class="ayuda">Lo parejo es que todos pasen en caja <b>la misma parte de su tiempo en tienda</b>: así quien está 8 horas tiene más horas de caja que quien está 6, en proporción. Cada cuadro dice las horas de caja de esa semana, qué parte de su tiempo en tienda fue y cuántas horas trae de más o de menos contra lo parejo. <span class="carga-alta chip-mini">rojo</span> = más de 2 h arriba; <span class="carga-baja chip-mini">azul</span> = más de 2 h abajo.</p>';
+    h += '<div class="desliza"><table class="hist"><thead><tr><th>Vendedor</th>' + datos.map((d) => '<th>Semana ' + C.fechaCorta(d.w) + '<small>equipo ' + Math.round(d.parte * 100) + '%</small></th>').join('') + '<th>Acumulado</th></tr></thead><tbody>';
+    orden.forEach((n) => {
+      let cajaT = 0, difT = 0, tiendaT = 0, altas = 0;
+      h += '<tr><td>' + (persona(n) ? chipPersona(n) : esc(nom(n))) + '</td>';
+      datos.forEach((d) => {
+        const p = d.ps[n];
+        if (!p) { h += '<td class="centro vacio">—</td>'; return; }
+        const dif = p.caja - d.parte * p.tienda;
+        cajaT += p.caja; tiendaT += p.tienda; difT += dif;
+        const m = marcaCarga(dif);
+        if (m.cls === 'carga-alta') altas++;
+        h += '<td class="centro ' + m.cls + '"><b>' + C.horasTxt(p.caja) + '</b><small>' + (p.tienda ? Math.round(100 * p.caja / p.tienda) : 0) + '% de ' + C.horasTxt(p.tienda) + '</small><small>' + m.txt + '</small></td>';
+      });
+      const m = marcaCarga(difT);
+      h += '<td class="centro ' + m.cls + '"><b>' + C.horasTxt(cajaT) + '</b><small>' + (tiendaT ? Math.round(100 * cajaT / tiendaT) : 0) + '% de su tiempo</small><small>' + m.txt + (altas > 1 ? ' · ' + altas + ' semanas alto' : '') + '</small></td></tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<div class="acciones" style="margin-top:14px"><button class="btn" type="button" id="btn-hist-borrar">🗑️ Borrar historial</button></div>';
+    cuerpo.innerHTML = h;
   }
 
   // Explica en palabras por qué quedan horas sin Caja 2 que sí la necesitan.
@@ -569,6 +645,7 @@
     const fin = Math.min(x.fin, g.fin, ini + S.config.turnoMax * 60);
     d.turnos.push({ caja: x.caja, nomina: n, ini, fin, manual: true, razon: 'Asignado a mano para cubrir un hueco de Caja ' + x.caja + ' (' + C.rangoLargo(x.ini, x.fin) + ').\nQueda de ' + C.aHora(ini) + ' a ' + C.aHora(fin) + ' según su horario GIRHA.' });
     d.turnos.sort((a, b) => a.caja - b.caja || a.ini - b.ini);
+    registrarSemana();
     guardar(); cerrarModal(); pintar();
     const V = C.validarRol(rol, opts());
     aviso(V.problemas.length ? 'Asignado. Quedan ' + V.problemas.length + ' aviso(s).' : 'Asignado. ✔ Todo cumple las reglas.');
@@ -654,11 +731,13 @@
       const fila = [nombre(n)];
       est['A' + r] = { bold: true, border: true, fill: color(n), color: textoSobre(color(n)) };
       rol.dias.forEach((d, i) => {
-        const ts = d.turnos.filter((t) => t.nomina === n);
+        const ts = d.turnos.filter((t) => t.nomina === n).sort((a, b) => a.ini - b.ini);
         const g = SEM.personas[n].dias[d.idx];
         const ref = col(i + 1) + r;
         if (ts.length) {
-          fila.push(ts.map((t) => C.rangoCorto(t.ini, t.fin) + '  C' + t.caja).join('\n'));
+          fila.push(ts.length > 1 && ts.every((t, k) => !k || ts[k - 1].fin === t.ini)
+            ? C.rangoCorto(ts[0].ini, ts[ts.length - 1].fin) + '  ' + ts.map((t) => 'C' + t.caja).join('→') + '\n(C1 desde ' + C.aHora(ts[1].ini) + ')'
+            : ts.map((t) => C.rangoCorto(t.ini, t.fin) + '  C' + t.caja).join('\n'));
           est[ref] = Object.assign({ bold: true, fill: color(n), color: textoSobre(color(n)) }, borde);
         } else if (g.estado === 'D' || g.estado === 'NP') {
           fila.push(g.estado);
@@ -720,10 +799,26 @@
     ExcelRol.descargar(bytes, 'rol_cajas_mina_' + SEM.inicio + '.xlsx');
   }
 
+  // Imprime / guarda en PDF el rol en UNA sola hoja carta horizontal: se mide y se encoge lo necesario.
   function imprimir() {
     if (!rolVigente()) { aviso('Primero genera el rol.'); return; }
     if (S.tab !== 'rol') ir('rol');
-    setTimeout(() => window.print(), 100);
+    setTimeout(() => {
+      const hoja = document.querySelector('#rol-cuerpo .hoja');
+      if (!hoja) return window.print();
+      const mm = 96 / 25.4;
+      const W = (279.4 - 16) * mm, H = (215.9 - 16) * mm; // carta horizontal, márgenes de 8 mm
+      document.body.classList.add('imprimiendo');
+      hoja.style.zoom = '';
+      hoja.style.width = W + 'px';
+      const alto = hoja.scrollHeight, ancho = hoja.scrollWidth;
+      const z = Math.min(1, W / ancho, H / alto) * 0.97;
+      hoja.style.zoom = String(z);
+      const limpiar = () => { hoja.style.zoom = ''; hoja.style.width = ''; document.body.classList.remove('imprimiendo'); window.removeEventListener('afterprint', limpiar); };
+      window.addEventListener('afterprint', limpiar);
+      window.print();
+      setTimeout(() => { if (!window.matchMedia('print').matches) limpiar(); }, 1500);
+    }, 120);
   }
 
   // ------------------------------------------------------------ eventos
@@ -784,9 +879,13 @@
         guardar(); pintar();
         return aviso('Listo: ' + dem.info.ticketsUnicos.toLocaleString('es-MX') + ' tickets en ' + dem.info.dias + ' días.');
       }
+      case 'btn-hist-borrar':
+        if (!confirm('¿Borrar todo el historial de horas de caja? No se puede deshacer (si lo exportaste en el catálogo, ahí sigue).')) return;
+        S.historial = {}; guardar(); return pintar();
       case 'btn-borrar-rol':
         if (!rolVigente()) return aviso('No hay rol que borrar.');
         if (!confirm('¿Borrar el rol de esta semana? Se pierden los cambios hechos a mano. El personal, GIRHA y los parámetros no se tocan.')) return;
+        if (SEM) delete S.historial[SEM.inicio];
         S.rol = null;
         guardar();
         ir('semana');
