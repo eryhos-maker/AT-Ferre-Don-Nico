@@ -120,6 +120,7 @@ tr:last-child td { border-bottom: 0; }
 .pastilla { display: block; width: 100%; border: 0; border-radius: 6px; padding: 4px 3px; margin: 2px 0; font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; line-height: 1.2; }
 .pastilla.hueco { background: #d0021b; color: #fff; }
 .pastilla.hueco.tranquilo { background: #ffe699; color: #6b4a00; }
+.celda small.cambio { display: block; font-size: .68rem; font-weight: 600; opacity: .85; }
 .pastilla.piso { border: 2px dashed rgba(0,0,0,.35); cursor: default; }
 .fila-piso td.nombre { background: #fff2cc; color: #6b4a00; }
 .pastilla.apoyo { border: 2px dashed #b35900; }

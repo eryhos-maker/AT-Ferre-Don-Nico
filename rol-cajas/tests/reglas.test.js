@@ -23,6 +23,18 @@ function generar(cat, sem, extra) {
   const v = C.validarRol(rol, { semana: sem, catalogo: cat, config, seleccion, demanda: extra && extra.demanda });
   return { rol, v, config };
 }
+// Turnos por persona en un día, uniendo los tramos seguidos (Caja 2 que pasa a Caja 1).
+function unidos(dia) {
+  const por = {};
+  dia.turnos.slice().sort((a, b) => a.ini - b.ini).forEach((t) => {
+    const l = (por[t.nomina] = por[t.nomina] || []);
+    const u = l[l.length - 1];
+    if (u && u.fin === t.ini) u.fin = t.fin; else l.push({ nomina: t.nomina, ini: t.ini, fin: t.fin, razon: t.razon });
+  });
+  return Object.values(por).flat();
+}
+// Personas en caja a una hora (minuto m).
+const enCajaA = (dia, m) => new Set(dia.turnos.filter((t) => t.ini <= m && t.fin > m).map((t) => t.nomina)).size;
 // Regla general: ningún turno generado rompe las reglas (solo puede haber huecos).
 function sinFaltas(v) {
   const faltas = v.problemas.filter((p) => !p.hueco && !/no hay vendedor en piso/.test(p.texto));
@@ -69,8 +81,8 @@ test('reglas básicas: máximo 3 días, 1 turno por día, 3 a 6 h y dentro de su
   sinFaltas(v);
   assert.equal(v.huecos.length, 0, 'con 16 personas se cubre todo');
   Object.values(v.resumen).forEach((r) => assert.ok(r.dias <= 3));
-  rol.dias.forEach((d) => d.turnos.forEach((t) => {
-    assert.ok(t.fin - t.ini >= 180 && t.fin - t.ini <= 360);
+  rol.dias.forEach((d) => unidos(d).forEach((t) => {
+    assert.ok(t.fin - t.ini >= 180 && t.fin - t.ini <= 360, 'duración ' + (t.fin - t.ini));
     const g = sem.personas[t.nomina].dias[d.idx];
     assert.ok(t.ini >= g.ini && t.fin <= g.fin);
     assert.ok(t.razon.length > 20, 'trae explicación');
@@ -261,18 +273,13 @@ test('fechas y horas en distintos formatos', () => {
   assert.equal(C.rangoCorto(510, 870), '8:30–2:30');
 });
 
-test('sin reporte de ventas y sin gente suficiente: la Caja 2 se cubre primero el fin de semana', () => {
+test('sin reporte de ventas y sin gente suficiente: la Caja 1 nunca queda vacía', () => {
   const cat = catalogo(10);
   const h = {};
   cat.forEach((p, i) => { h[p.nomina] = [M, T, M, DM, T, M, T].map((x, k) => (k === (i + 4) % 7 && k !== 2 ? 'D' : i % 2 ? (x === M ? T : x === T ? M : x === DM ? DT : DM) : x)); });
   const { rol, v } = generar(cat, semanaDe(cat, h));
   sinFaltas(v);
-  // sin cajero de Caja 2 = horas que cubre un vendedor de piso o que quedan sin nadie
-  const sinCajero2 = (dia) => v.piso[dia.idx].length;
-  assert.ok(rol.dias.some((d) => sinCajero2(d) > 0), 'con 10 personas no alcanza');
-  const sab = rol.dias[2];
-  assert.equal(sab.cod, 'SAB');
-  assert.equal(sinCajero2(sab), 0, 'el sábado tiene cajero de Caja 2 todo el día');
+  assert.ok(rol.dias.some((d) => v.piso[d.idx].length > 0), 'con 10 personas no alcanza para 2 cajeros todo el día');
   assert.ok(!v.huecos.some((x) => x.caja === 1), 'la Caja 1 siempre queda cubierta');
 });
 
@@ -332,36 +339,42 @@ test('con un reporte subido se calcula el día cargado (8 de cada 10 días)', ()
 });
 
 // ------------------------------------- Caja 2 primero en las horas de 2 cajas
-test('si no alcanza la gente, cada día tiene Caja 2 en sus horas más cargadas y no en las tranquilas', () => {
+// Semana tipo Ferre Mina: 2 de mañana (8 a 2), Lucía 10 a 7, Axel 8 a 5, Luis 12 a 9 y 5 de tarde (3:30 a 9:30).
+function semanaMina() {
+  const M6 = '08:00-14:00', T6 = '15:30-21:30', TD = '13:00-19:00', L = '10:00-19:00', X = '12:00-21:00', A8 = '08:00-17:00';
+  const P = [
+    [T6, T6, T6, TD, T6, T6, 'D'], [X, X, X, '11:00-19:00', X, 'D', X], [T6, 'D', T6, TD, T6, 'D', T6],
+    [T6, T6, T6, TD, T6, T6, 'D'], [T6, T6, T6, TD, 'D', T6, T6], [L, L, L, '08:00-16:00', L, 'D', L],
+    ['D', A8, A8, A8, A8, A8, A8], [M6, 'D', M6, M6, M6, M6, 'D'], [M6, M6, M6, 'D', M6, M6, M6], [T6, T6, T6, TD, T6, T6, 'D'],
+  ];
+  const cat = catalogo(P.length);
+  return { cat, sem: semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, P[i]]))), lucia: cat[5].nomina, tarde: [0, 2, 3, 4, 9].map((i) => cat[i].nomina) };
+}
+
+test('semana tipo Mina: Caja 1 nunca vacía, el domingo en la mañana hay 2 en caja y las horas se reparten', () => {
   require('../js/historico.js');
   const d = globalThis.HISTORICO_VENTAS.demanda;
-  const H = { m: '08:00-17:00', t: '12:00-21:00', c: '15:30-21:30', a: '07:30-13:30', x: '10:00-19:00', D: 'D' };
-  const P = ['mmmDmmm', 'tttttDt', 'mDmmmmm', 'ttDtttt', 'cccDccc', 'aaaaDaa', 'xxxxxDx', 'Dmmtttm', 'tDttmmt', 'ccDcccc'];
-  const cat = catalogo(P.length);
-  const sem = semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, [...P[i]].map((k) => H[k])])));
-  const { rol, v, config } = generar(cat, sem, { demanda: d });
-  sinFaltas(v);
-  assert.equal(rol.prioriza, true);
-  const nivel = (dia, h) => C.nivelCajas(C.cargaHora(d, dia.cod, h), config.capacidad);
-  rol.dias.forEach((dia) => {
-    const c2 = dia.turnos.filter((t) => t.caja === 2);
-    assert.ok(c2.length >= 1, dia.nombre + ' quedó sin Caja 2');
-    // la hora más cargada del día tiene Caja 2
-    let pico = Math.floor(dia.ab / 60);
-    for (let h = pico; h * 60 < dia.ci; h++) if (C.cargaHora(d, dia.cod, h) > C.cargaHora(d, dia.cod, pico)) pico = h;
-    assert.ok(c2.some((t) => t.ini <= pico * 60 && t.fin >= (pico + 1) * 60), dia.nombre + ': sin Caja 2 en su hora pico (' + pico + ')');
-    // la Caja 1 se cubre completa
-    assert.equal(v.huecos.filter((x) => x.dia === dia.idx && x.caja === 1).length, 0);
+  [3, 4].forEach((maxDias) => {
+    const { cat, sem, lucia, tarde } = semanaMina();
+    const { rol, v } = generar(cat, sem, { demanda: d, config: { maxDias } });
+    sinFaltas(v);
+    assert.ok(!v.huecos.some((x) => x.caja === 1), maxDias + ' días: la Caja 1 nunca queda vacía');
+    const dom = rol.dias.find((x) => x.cod === 'DOM');
+    for (let m = 9 * 60; m < 13 * 60; m += 30) assert.equal(enCajaA(dom, m), 2, 'domingo ' + C.aHora(m) + ' con 2 en caja');
+    // quien llega a las 10 no se queda en piso esperando a las 2 mientras la Caja 2 está sola:
+    // si entra a caja más tarde, es porque otra persona ya cubre la Caja 2 desde las 10
+    rol.dias.forEach((dia) => unidos(dia).filter((t) => t.nomina === lucia && dia.cod !== 'DOM' && t.ini > 10 * 60).forEach((t) => {
+      assert.equal(enCajaA(dia, 10 * 60 + 30), 2, dia.nombre + ': Lucía entra a las ' + C.aHora(t.ini) + ' y a las 10:30 hay una sola caja');
+    }));
+    // los de la tarde entran a caja cuando llegan (3:30), no a las 6
+    rol.dias.forEach((dia) => unidos(dia).filter((t) => tarde.includes(t.nomina) && dia.cod !== 'DOM').forEach((t) => assert.ok(t.ini <= 17 * 60, dia.nombre + ': turno de tarde desde ' + C.aHora(t.ini))));
+    // cuando hay 2 en caja, uno es Caja 1 y el otro Caja 2; si sale el de Caja 1, el de Caja 2 pasa a Caja 1
+    rol.dias.forEach((dia) => { for (let m = dia.ab; m < dia.ci; m += 30) { const c1 = dia.turnos.filter((t) => t.caja === 1 && t.ini <= m && t.fin > m).length; const c2 = dia.turnos.filter((t) => t.caja === 2 && t.ini <= m && t.fin > m).length; assert.ok(c1 <= 1 && c2 <= 1 && (c2 === 0 || c1 === 1), dia.nombre + ' ' + C.aHora(m)); } });
+    if (maxDias === 3) {
+      const horas = cat.map((p) => (v.resumen[p.nomina] ? v.resumen[p.nomina].horas : 0) / 60);
+      assert.ok(Math.max(...horas) - Math.min(...horas) <= 9, 'reparto de horas: ' + horas.join(', '));
+    }
   });
-  // los huecos de horas tranquilas se marcan aparte
-  v.huecos.forEach((x) => {
-    let todas = true;
-    for (let h = Math.floor(x.ini / 60); h * 60 < x.fin; h++) if (nivel(rol.dias[x.dia], h) >= 2) todas = false;
-    assert.equal(!!x.tranquilo, x.caja === 2 && todas);
-  });
-  // mismo resultado si se genera otra vez con los mismos datos
-  const otra = generar(cat, sem, { demanda: d }).rol;
-  assert.deepEqual(otra.dias.map((x) => x.turnos.map((t) => [t.caja, t.nomina, t.ini, t.fin])), rol.dias.map((x) => x.turnos.map((t) => [t.caja, t.nomina, t.ini, t.fin])));
 });
 
 test('si alcanza la gente, las dos cajas se cubren todo el día aunque haya horas tranquilas', () => {
@@ -371,7 +384,6 @@ test('si alcanza la gente, las dos cajas se cubren todo el día aunque haya hora
   const sem = semanaDe(cat, Object.fromEntries(cat.map((p, i) => [p.nomina, Array(7).fill(i % 2 ? '08:00-17:00' : '12:00-21:00')])));
   const { rol, v } = generar(cat, sem, { demanda: d });
   sinFaltas(v);
-  assert.equal(rol.prioriza, false);
   assert.equal(v.huecos.length, 0);
 });
 

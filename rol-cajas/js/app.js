@@ -414,7 +414,6 @@
     if (!rol.conVentas || !S.ventas) h += '<div class="caja-aviso info">Sin reporte de ventas: los apoyos de Caja 3 se calculan cuando lo subas (paso 4) y presiones <b>Actualizar apoyos Caja 3</b>. Mientras tanto, si no alcanza la gente, la Caja 2 se cubre primero sábado, domingo y viernes.</div>';
     else if (!rol.ordenConVentas && V.huecos.some((x) => x.caja === 2)) h += '<div class="caja-aviso info">Ya tienes el reporte de ventas y hay horas sin Caja 2. Si presionas <b>Generar rol de nuevo</b>, la Caja 2 se cubrirá primero en los días de más venta según el reporte (se pierden los cambios hechos a mano).</div>';
     h += porQueHuecos(rol, V);
-    if (rol.prioriza) h += '<div class="caja-aviso info"><b>No alcanza la gente marcada para tener Caja 2 todo el día.</b> Por eso el rol puso la Caja 2 primero en las horas que piden 2 o 3 cajas según ventas, empezando cada día por sus horas más cargadas. En las horas sin cajero de Caja 2, la cubre un vendedor de piso que entra cuando se junta fila (fila <b>CAJA 2 DE PISO</b>).</div>';
     h += '</div>';
 
     h += '<div class="hoja"><h2 class="titulo">ROL DE CAJAS MINA</h2><p class="semana-txt">Semana del jueves ' + C.fechaCorta(SEM.inicio) + ' al miércoles ' + C.fechaCorta(fin) + '/' + fin.slice(0, 4) + '</p>';
@@ -425,13 +424,15 @@
       const dias = V.resumen[n] ? V.resumen[n].dias : 0;
       h += '<tr><td class="nombre">' + chipPersona(n) + '</td>';
       rol.dias.forEach((d) => {
-        const ts = d.turnos.filter((t) => t.nomina === n);
+        const ts = d.turnos.filter((t) => t.nomina === n).sort((a, b) => a.ini - b.ini);
         const err = problemasDe(V, d.idx, n).length > 0;
         const g = SEM.personas[n].dias[d.idx];
         if (ts.length) {
           const bg = color(n);
           h += '<td style="background:' + esc(bg) + ';color:' + textoSobre(bg) + '"><button type="button" class="celda' + (err ? ' error' : '') + '" data-celda="' + d.idx + '|' + esc(n) + '">' +
-            ts.map((t) => '<span class="blq">' + C.rangoCorto(t.ini, t.fin) + '</span><span class="et' + (t.caja === 2 ? ' c2' : '') + '">C' + t.caja + '</span>' + (t.manual ? ' <span class="mano" title="Editado a mano">✍️</span>' : '')).join('<br>') +
+            (ts.length > 1 && ts.every((t, i) => !i || ts[i - 1].fin === t.ini)
+              ? '<span class="blq">' + C.rangoCorto(ts[0].ini, ts[ts.length - 1].fin) + '</span>' + ts.map((t) => '<span class="et' + (t.caja === 2 ? ' c2' : '') + '">C' + t.caja + '</span>').join('→') + '<small class="cambio">C1 desde ' + C.aHora(ts[1].ini) + '</small>'
+              : ts.map((t) => '<span class="blq">' + C.rangoCorto(t.ini, t.fin) + '</span><span class="et' + (t.caja === 2 ? ' c2' : '') + '">C' + t.caja + '</span>' + (t.manual ? ' <span class="mano" title="Editado a mano">✍️</span>' : '')).join('<br>')) +
             (err ? ' ⚠️' : '') + '</button></td>';
         } else {
           const txt = g.estado === 'TRABAJA' ? '<span class="fantasma">' + C.rangoCorto(g.ini, g.fin) + '</span>' : '<span class="estado-' + g.estado + '">' + esc(g.estado === 'FALTA' ? '?' : g.texto) + '</span>';
@@ -491,10 +492,11 @@
     const rol = rolVigente();
     const d = rol.dias[di];
     const g = SEM.personas[n].dias[di];
-    const ts = d.turnos.filter((t) => t.nomina === n);
+    const ts = d.turnos.filter((t) => t.nomina === n).sort((a, b) => a.ini - b.ini);
     const V = C.validarRol(rol, opts());
     const probs = problemasDe(V, di, n).concat(V.problemas.filter((p) => p.dia == null && p.nomina === n));
-    const t = ts[0];
+    // si entra en Caja 2 y pasa a Caja 1, se edita como un solo turno
+    const t = ts.length ? Object.assign({}, ts[0], { fin: ts[ts.length - 1].fin }) : null;
     let h = '<h3>' + chipPersona(n) + ' · ' + d.nombre + ' ' + C.fechaCorta(d.fecha) + '</h3>' +
       '<p>Horario GIRHA: <b>' + (g.estado === 'TRABAJA' ? C.rangoLargo(g.ini, g.fin) : esc(g.estado === 'FALTA' ? 'sin horario en el archivo' : g.texto + (g.estado === 'D' ? ' (descanso)' : g.estado === 'NP' ? ' (no programado)' : ''))) + '</b></p>';
     if (probs.length) h += '<div class="caja-aviso error"><ul>' + probs.map((p) => '<li>' + esc(p.texto) + '</li>').join('') + '</ul></div>';
@@ -654,11 +656,13 @@
       const fila = [nombre(n)];
       est['A' + r] = { bold: true, border: true, fill: color(n), color: textoSobre(color(n)) };
       rol.dias.forEach((d, i) => {
-        const ts = d.turnos.filter((t) => t.nomina === n);
+        const ts = d.turnos.filter((t) => t.nomina === n).sort((a, b) => a.ini - b.ini);
         const g = SEM.personas[n].dias[d.idx];
         const ref = col(i + 1) + r;
         if (ts.length) {
-          fila.push(ts.map((t) => C.rangoCorto(t.ini, t.fin) + '  C' + t.caja).join('\n'));
+          fila.push(ts.length > 1 && ts.every((t, k) => !k || ts[k - 1].fin === t.ini)
+            ? C.rangoCorto(ts[0].ini, ts[ts.length - 1].fin) + '  ' + ts.map((t) => 'C' + t.caja).join('→') + '\n(C1 desde ' + C.aHora(ts[1].ini) + ')'
+            : ts.map((t) => C.rangoCorto(t.ini, t.fin) + '  C' + t.caja).join('\n'));
           est[ref] = Object.assign({ bold: true, fill: color(n), color: textoSobre(color(n)) }, borde);
         } else if (g.estado === 'D' || g.estado === 'NP') {
           fila.push(g.estado);

@@ -70,12 +70,12 @@ Línea de tiempo hora por hora: quién está en Caja 1, Caja 2 y el apoyo de Caj
 | Regla | Cómo la aplica |
 |---|---|
 | Mínimo 2 cajas abiertas todo el horario | Cubre Caja 1 y Caja 2 de apertura a cierre. Si no alcanza, marca el hueco en rojo; **no inventa** a nadie. |
-| Caja 1 = cajero fijo | Se cubre primero, todos los días. |
-| Caja 2 = cajero flotante | Se cubre con la gente que queda. Si no alcanza para todo el día, primero se da a cada día un turno en sus horas más cargadas y luego se rellenan las demás horas que piden 2 cajas; las horas tranquilas (basta Caja 1) quedan al final y se marcan en amarillo. Sin ventas: primero sábado, domingo y viernes. |
+| Caja 1 = cajero fijo | Nunca queda vacía. El día se arma viendo cuántas personas hay en caja a cada hora: con una, está abierta la Caja 1; con dos, también la Caja 2. El primero en entrar es Caja 1; quien entra después es Caja 2 y, cuando sale el de Caja 1, **pasa a Caja 1** (por ejemplo, quien llega a las 10 entra como Caja 2 y a las 2 pasa a Caja 1). |
+| Caja 2 = cajero flotante | Se pone primero en las horas que piden 2 cajas según ventas (más mientras más tickets) y casi no se gasta gente en horas tranquilas. Antes de armar, la app aparta a quien hace falta cada día para la Caja 1, para no gastarle sus días en otro día. |
 | Máx. 3 días por semana en C1/C2, 1 turno por día | No asigna un 4.º día ni dos turnos el mismo día. |
 | Turno de 3 a 6 h, en bloques de media hora | Todos los turnos generados cumplen. |
 | Dentro del horario GIRHA | Nunca asigna fuera de su horario ni en D o NP. |
-| Reparto parejo | Prefiere a quien lleva menos días, menos cierres, menos fines de semana y menos horas. Los empates se rotan cada semana. |
+| Reparto parejo | Calcula cuántas horas de caja le tocarían a cada quien y castiga cada vez más pasarse de ellas. También prefiere menos cierres y fines de semana, que cada quien entre a caja cuando llega, y rota los empates cada semana. Prueba varios órdenes de días y se queda con el que deja menos huecos y horas más parejas. |
 | Caja 2 de piso | Donde nadie tiene turno de Caja 2, la app nombra a un vendedor que está en piso (con horario GIRHA y sin turno de caja) para que entre a cobrar cuando se junte fila. No cuenta en sus días de caja. Se ve en la fila **CAJA 2 DE PISO**. Solo queda en rojo si no hay nadie en piso. |
 | Caja 3 = apoyo en horas pico | Sugiere a alguien en piso (con horario GIRHA y fuera de C1/C2), marcado o no, y rota a quien lleva menos apoyos. **No cuenta** en sus 3 días. Si no hay nadie en piso, lo avisa. |
 | Cambios a mano | Avisa si alguien pasa de 3 días, si un turno sale de su horario o dura más o menos de lo permitido, y si quedan menos de 2 cajas. |
