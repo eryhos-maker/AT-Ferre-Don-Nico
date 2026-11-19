@@ -567,8 +567,12 @@
       '<div class="acciones"><button class="btn pri" type="button" id="btn-girha">📥 Descargar carga de GIRHA</button>' +
       '<button class="btn" type="button" id="btn-girha-sel"' + (sel.length ? '' : ' disabled') + '>👤 Solo seleccionadas (' + sel.length + ')</button></div>' +
       (sel.length ? '<p class="ayuda" style="margin:6px 0 0">Seleccionadas: ' + sel.map((id) => esc(C.nombreCorto(K.porId.get(id)))).join(', ') + '</p>' : '<p class="ayuda" style="margin:6px 0 0">Para corregir a una o dos personas, márcalas con ☑ en el tablero.</p>') + '</div>';
-    h += '<div class="tarjeta"><h3>B · Rol de cajas</h3><p>Mismo formato, para la app de Rol de Cajas de Ferre Mina. Todo día que la persona no está en Ferre Mina va como <b>D</b> (descanso, festivo, vacaciones, PTT, comisión o cobertura en otra tienda).</p>' +
-      '<div class="acciones"><button class="btn pri" type="button" id="btn-cajas">📥 Descargar para Rol de Cajas</button></div></div>';
+    const confirmada = SEM.estado !== 'borrador';
+    h += '<div class="tarjeta"><h3>B · Rol de cajas</h3><p>Pasa la semana a la app de Rol de Cajas de Ferre Mina, sin descargar ni subir archivos. Todo día que la persona no está en Ferre Mina va como <b>D</b> (descanso, festivo, vacaciones, PTT, comisión o cobertura en otra tienda).</p>' +
+      (confirmada ? '' : '<div class="caja-aviso alerta" style="margin-bottom:8px">Primero autoriza la semana en <b>4 · Validación</b>: el rol de cajas se arma con los horarios ya confirmados.</div>') +
+      '<div class="acciones"><button class="btn pri" type="button" id="btn-abrir-cajas"' + (confirmada ? '' : ' disabled') + '>🧾 Armar rol de cajas con esta semana</button>' +
+      '<button class="btn" type="button" id="btn-cajas">📥 Descargar archivo</button></div>' +
+      '<p class="ayuda" style="margin:6px 0 0">Se abre Rol de Cajas en el paso 3 con la semana ya cargada y los vendedores marcados (sin gerencia ni supervisión). Revisa quién entra a caja y presiona <b>Generar rol</b>.</p></div>';
     h += '<div class="tarjeta"><h3>C · PDF de una hoja</h3><p>Oficio horizontal, los ' + K.personas.filter((p) => p.activo).length + ' colaboradores agrupados por área con los colores del tablero. En la ventana de impresión elige <b>Guardar como PDF</b> y tamaño <b>Oficio</b>.</p>' +
       '<div class="acciones"><button class="btn pri" type="button" id="btn-pdf">🖨️ Imprimir / PDF</button></div></div>';
     h += '</div>';
@@ -588,6 +592,27 @@
     programarGuardado();
     aviso('Archivo listo: ' + (g.filas.length - 1) + ' filas.' + (g.excluidos.length ? ' Quedaron fuera por no tener nómina: ' + g.excluidos.join(', ') + '.' : ''), true);
   }
+  // Rol de Cajas vive en la misma dirección (eryhos-maker.github.io), así que comparten la memoria del
+  // navegador: se le deja la semana lista en su espacio y se abre en una pestaña nueva.
+  const CLAVE_CAJAS = 'rolCajasMina.v1';
+  function direccionRolCajas() {
+    if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return location.pathname.replace(/horarios\/.*$/, 'rol-cajas/');
+    return location.pathname.replace(/horarios\/.*$/, '');
+  }
+  function abrirRolCajas() {
+    if (SEM.estado === 'borrador') return aviso('Primero autoriza la semana en "4 · Validación".', true);
+    let previo = null;
+    try { previo = JSON.parse(localStorage.getItem(CLAVE_CAJAS) || 'null'); } catch (e) { previo = null; }
+    if (previo && previo.rol && previo.rol.semana !== SEM.id && !confirm('Rol de Cajas tiene armado el rol de otra semana. Se va a cambiar por la semana del ' + C.fechaLarga(SEM.id) + ' (el historial de horas de caja se conserva). ¿Continuar?')) return;
+    const S = C.estadoRolCajas(K, SEM, previo);
+    try { localStorage.setItem(CLAVE_CAJAS, JSON.stringify(S)); } catch (e) { return aviso('El navegador no dejó guardar la semana para Rol de Cajas. Usa "Descargar archivo" y súbelo allá.', true); }
+    registrar('', '', '', '', 'Pasó la semana a Rol de Cajas');
+    programarGuardado();
+    const w = window.open(direccionRolCajas() + '?desde=horarios', '_blank');
+    if (!w) aviso('Ya está lista en Rol de Cajas. El navegador bloqueó la pestaña nueva: ábrela tú en ' + location.origin + direccionRolCajas(), true);
+    else aviso('Semana enviada a Rol de Cajas: ' + S.seleccion.length + ' vendedores marcados para caja. Si ya tenías Rol de Cajas abierto en otra pestaña, ciérrala.', true);
+  }
+
   function descargarCajas() {
     const r = C.filasRolCajas(K, SEM);
     X.descargar(X.cargaMasiva(r.filas, 'Rol de cajas'), 'rol_cajas_' + SEM.id + '.xlsx');
@@ -682,6 +707,8 @@
         case 'btn-girha': return descargarGirha(null);
         case 'btn-girha-sel': return descargarGirha(UI.seleccion.filter((id) => K.porId.has(id)));
         case 'btn-cajas': return descargarCajas();
+        case 'btn-abrir-cajas': return abrirRolCajas();
+        case 'btn-actualizar': if (sinGuardar || guardando) await guardarSemana(); return location.reload();
         case 'btn-pdf': return imprimir();
         default:
       }
@@ -718,6 +745,26 @@
 
   $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') cerrarModal(); });
   window.addEventListener('beforeunload', (e) => { if (sinGuardar || guardando) { e.preventDefault(); e.returnValue = ''; } });
+
+  // Aviso de versión nueva: si se publicó una actualización mientras la app estaba abierta, se ofrece recargar.
+  const VERSION = ((document.querySelector('.sub') || {}).textContent || '').match(/Versión ([\w.]+)/);
+  async function revisarVersion() {
+    if (!VERSION || document.getElementById('aviso-version')) return;
+    try {
+      const t = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store' })).text();
+      const m = t.match(/Versión ([\w.]+)/);
+      if (!m || m[1] === VERSION[1]) return;
+      const d = document.createElement('div');
+      d.id = 'aviso-version';
+      d.className = 'caja-aviso info no-print';
+      d.style.cssText = 'margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap';
+      d.innerHTML = '<span>Hay una versión nueva de la app (' + esc(m[1]) + '). Actualízala para ver los últimos cambios; lo que hayas hecho se guarda antes.</span><button class="btn pri chico" type="button" id="btn-actualizar">🔄 Actualizar</button>';
+      document.querySelector('main').prepend(d);
+    } catch (e) { /* sin internet: se revisa después */ }
+  }
+  setInterval(revisarVersion, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarVersion(); });
+  setTimeout(revisarVersion, 3000);
 
   // ------------------------------------------------------------ inicio
   pintar();

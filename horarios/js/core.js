@@ -1248,6 +1248,43 @@
     return { filas, excluidos };
   }
 
+  // Colores que usa la app de Rol de Cajas para cada vendedor (los mismos de rol-cajas/js/core.js).
+  const COLORES_CAJAS = ['#FFD966', '#9BC2E6', '#A9D08E', '#F4B084', '#C9A0DC', '#FF9F9F', '#8EA9DB',
+    '#FFE699', '#C6E0B4', '#F8CBAD', '#B4C6E7', '#99E0DA', '#E6B8B7', '#D9D9D9'];
+  // Puestos que por omisión no entran a Caja 1 / Caja 2 (se pueden marcar a mano en Rol de Cajas).
+  const SIN_CAJA = new Set(['GDF', 'JEFOP', 'JADM', 'ESDFR', 'SUP COM']);
+
+  /*
+   * Prepara lo que la app de Rol de Cajas necesita para la semana, sin pasar por archivos.
+   * estado = lo que Rol de Cajas ya tiene guardado en el navegador (o null). Regresa el estado nuevo.
+   * - Agrega al catálogo de Rol de Cajas a quien falte (nombre corto y un color), sin tocar a los que ya están.
+   * - Carga las filas de la semana como si fuera el archivo de GIRHA y deja la semana elegida.
+   * - Marca para caja a todos menos gerencia y supervisión (si ya había selección de esa semana, la respeta).
+   */
+  function estadoRolCajas(K, semana, estado) {
+    const S = Object.assign({}, estado || {});
+    const { filas } = filasRolCajas(K, semana);
+    const catalogo = (S.catalogo || []).slice();
+    const tiene = new Set(catalogo.map((p) => normNomina(p.nomina)));
+    const nominas = [...new Set(filas.slice(1).map((f) => normNomina(f[1])))];
+    nominas.forEach((n) => {
+      if (tiene.has(n)) return;
+      const p = K.porId.get(n);
+      catalogo.push({ nomina: n, nombre: (p ? nombreCorto(p) : 'Nómina ' + n).toUpperCase(), color: COLORES_CAJAS[catalogo.length % COLORES_CAJAS.length] });
+      tiene.add(n);
+    });
+    const mismaSemana = S.semanaSel === semana.id && Array.isArray(S.seleccion) && S.seleccion.length;
+    const seleccion = mismaSemana ? S.seleccion : nominas.filter((n) => { const p = K.porId.get(n); return !p || !SIN_CAJA.has(normTexto(p.puesto)); });
+    return Object.assign(S, {
+      catalogo,
+      girha: { nombre: 'Horarios ' + fechaCorta(semana.fechas[0]) + ' al ' + fechaCorta(semana.fechas[6]) + ' (desde la app de Horarios)', filas },
+      semanaSel: semana.id,
+      seleccion,
+      rol: S.rol && S.rol.semana === semana.id ? S.rol : null,
+      tab: 'semana',
+    });
+  }
+
   // Revisa un archivo de carga (filas con títulos): 7 filas por persona y el bloque empieza en jueves.
   function revisarBloques(filas) {
     const errores = [];
@@ -1350,6 +1387,6 @@
     fechasDe, indexar, celda, cambiarCelda, novedadesDeSemana, quienAbrio, abreEstaSemana, cuadrarHoras,
     tiendasRelleno, generarSemana, validarSemana, horasSemana, revisarTraslados, holgura,
     personasOrdenadas, filasGirha, filasRolCajas, revisarBloques, mensajesWhatsApp,
-    semanaDesdeDias, diasDesdeSemana, ligarSinNomina,
+    semanaDesdeDias, diasDesdeSemana, ligarSinNomina, estadoRolCajas,
   };
 });

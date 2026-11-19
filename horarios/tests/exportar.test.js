@@ -184,3 +184,30 @@ test('el tablero sigue el orden de la hoja Plantilla dentro de cada área', () =
   const areas = [...new Set(C.personasOrdenadas(K).map((p) => p.areaKey))];
   assert.deepEqual(areas, ['FERRETERIA MINA', 'CENTRO DE COLOR', 'RED BEREL', 'COMODINES']);
 });
+
+test('B · Rol de Cajas desde la misma app: el motor de rol-cajas lee la semana y arma el rol', { skip: !fs.existsSync(CAJAS) && 'no está rol-cajas' }, () => {
+  const R = require(CAJAS);
+  const s = sem();
+  const previo = { catalogo: [{ nomina: '9001', nombre: 'YA ESTABA', color: '#000000' }], config: R.configInicial() };
+  const S = C.estadoRolCajas(K, s, previo);
+  // Respeta lo que ya había en el catálogo y agrega a los demás con nombre y color.
+  assert.equal(S.catalogo.find((p) => p.nomina === '9001').nombre, 'YA ESTABA');
+  assert.ok(S.catalogo.length > 10);
+  S.catalogo.forEach((p) => assert.match(p.color, /^#[0-9A-F]{6}$/i));
+  // Supervisión y gerencia no van marcadas para caja; los vendedores sí.
+  assert.ok(!S.seleccion.includes('7002') && !S.seleccion.includes('7003') && !S.seleccion.includes('7001'));
+  assert.ok(S.seleccion.includes('9001'));
+  assert.equal(S.semanaSel, s.id);
+  assert.equal(S.tab, 'semana');
+  // Lo mismo que hace rol-cajas/js/app.js al abrir: lee GIRHA, arma la semana y genera el rol.
+  const g = R.leerGirha(S.girha.filas, S.catalogo);
+  assert.deepEqual(g.semanas, [s.id]);
+  const semCajas = R.armarSemana(g.registros, S.semanaSel, S.catalogo);
+  assert.deepEqual(semCajas.avisos, []);
+  const rol = R.generarRol({ semana: semCajas, catalogo: S.catalogo, config: R.configInicial(), seleccion: S.seleccion });
+  assert.equal(rol.dias.length, 7);
+  assert.ok(rol.dias.every((d) => d.turnos.length > 0));
+  // Si se vuelve a mandar la misma semana, se conserva la selección que haya hecho el usuario.
+  const S2 = C.estadoRolCajas(K, s, Object.assign({}, S, { seleccion: ['9001'] }));
+  assert.deepEqual(S2.seleccion, ['9001']);
+});
