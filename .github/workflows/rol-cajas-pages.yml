@@ -1,11 +1,13 @@
-# Publica la app "Rol de Cajas – Ferre Mina" (carpeta rol-cajas/) en GitHub Pages.
+# Publica en GitHub Pages las dos apps de Ferre Don Nico:
+# - "Rol de Cajas – Ferre Mina" (carpeta rol-cajas/) en la raíz del sitio, como siempre.
+# - "Horarios Semanales" (carpeta horarios/) en /horarios/.
 # Requisito único: en GitHub > Settings > Pages, elegir "Source: GitHub Actions".
-name: Publicar Rol de Cajas
+name: Publicar Rol de Cajas y Horarios
 
 on:
   push:
     branches: [main]
-    paths: ['rol-cajas/**', '.github/workflows/rol-cajas-pages.yml']
+    paths: ['rol-cajas/**', 'horarios/**', '.github/workflows/rol-cajas-pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -15,7 +17,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false  # una publicación a medias deja el sitio sin paquete; mejor esperar a que termine
 
 jobs:
   publicar:
@@ -24,15 +26,24 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Probar reglas
+      - name: Probar reglas de Rol de Cajas
         run: cd rol-cajas && node --test tests/*.test.js
+      - name: Probar motor de Horarios
+        run: cd horarios && node --test tests/*.test.js
+      - name: Armar el sitio
+        run: |
+          mkdir -p _site
+          cp -r rol-cajas/. _site/
+          mkdir -p _site/horarios
+          cp -r horarios/. _site/horarios/
+          rm -rf _site/horarios/tests _site/tests
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
-          path: rol-cajas
+          path: _site
       - id: deploy
         uses: actions/deploy-pages@v4

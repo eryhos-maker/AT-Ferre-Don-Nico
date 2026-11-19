@@ -1,0 +1,10 @@
+{
+  "name": "horarios-ferre-don-nico",
+  "private": true,
+  "type": "commonjs",
+  "description": "Horarios semanales de Ferretería y Pintura – Ferre Don Nico. App de una sola página, no requiere instalar nada.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "ejemplo": "node ejemplos/generar-libro.js"
+  }
+}

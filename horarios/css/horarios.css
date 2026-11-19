@@ -1,0 +1,114 @@
+/* Complemento de estilos.css (que es idéntico al de rol-cajas): solo lo que el tablero de horarios necesita. */
+main { max-width: 1440px; }
+
+/* colores de celda */
+:root {
+  --c-desc: #d9d9d9; --c-vac: #ffe699; --c-ptt: #fff2cc; --c-com: #bdd7ee; --c-inc: #f4cccc;
+}
+
+.subpestanas { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.subpestanas button[aria-pressed="true"] { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+/* tarjetas */
+.tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.tarjeta { border: 1px solid var(--linea); border-radius: var(--radio); padding: 14px; background: #fff; }
+.tarjeta h3 { margin-top: 0; }
+.tarjeta .acciones { margin-bottom: 0; }
+
+/* editor de catálogos */
+.editor input[type="text"] { min-width: 70px; width: 100%; min-height: 32px; padding: 4px 6px; }
+.editor td { padding: 3px 4px; }
+.editor td.ancho input { min-width: 220px; }
+
+/* tablero */
+.tablero-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 14px; align-items: start; }
+.panel { position: sticky; top: 118px; max-height: calc(100vh - 130px); overflow: auto; border: 1px solid var(--linea); border-radius: var(--radio); padding: 12px; background: #fbfcfd; font-size: .88rem; }
+.panel h3 { font-size: .95rem; margin: 12px 0 4px; display: flex; justify-content: space-between; gap: 8px; }
+.panel h3:first-child { margin-top: 0; }
+.panel ul { margin: 0; padding-left: 18px; }
+.panel li { margin: 2px 0; }
+.panel .vacio { color: var(--verde-t); }
+.cuenta-b { display: inline-block; min-width: 24px; text-align: center; border-radius: 99px; padding: 0 7px; font-size: .8rem; font-weight: 700; background: var(--verde-f); color: var(--verde-t); }
+.cuenta-b.mal { background: var(--rojo-f); color: var(--rojo-t); }
+.cuenta-b.med { background: #fff4d6; color: #6b4a00; }
+.holgura-dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 6px; text-align: center; }
+.holgura-dias span { background: var(--gris-f); border-radius: 6px; padding: 3px 0; font-size: .75rem; }
+.holgura-dias span b { display: block; font-size: 1rem; }
+.holgura-dias span.cero { background: var(--rojo-f); color: var(--rojo-t); }
+
+.horario { table-layout: fixed; min-width: 980px; }
+.horario th, .horario td { border: 1px solid #b8c1cc; text-align: center; padding: 0; }
+.horario thead th { background: var(--azul); color: #fff; padding: 6px 4px; font-size: .8rem; }
+.horario thead th small { display: block; font-weight: 400; opacity: .85; text-transform: none; }
+.horario th.sel, .horario td.sel { width: 34px; }
+.horario th.nombre, .horario td.nombre { width: 190px; text-align: left; padding: 4px 8px; }
+.horario th.cuenta, .horario td.cuenta { width: 62px; font-size: .85rem; }
+.horario td.nombre b { display: block; font-size: .9rem; }
+.horario td.nombre small { color: var(--suave); font-size: .75rem; }
+.horario tr.area td { text-align: left; font-weight: 800; padding: 5px 10px; font-size: .85rem; letter-spacing: .03em; }
+.horario tr.festivo-fila td { font-size: .72rem; }
+.horario .celda { min-height: 46px; }
+.celda .lug { display: block; font-size: .7rem; font-weight: 700; line-height: 1.1; }
+.celda .tip { display: block; font-size: .95rem; font-weight: 800; }
+.celda .nota-c { display: block; font-size: .65rem; opacity: .8; }
+.t-D, .t-NP { background: var(--c-desc); }
+.t-VAC { background: var(--c-vac); }
+.t-PTT { background: var(--c-ptt); }
+.t-COM { background: var(--c-com); }
+.t-INC { background: var(--c-inc); }
+.celda.aviso { box-shadow: inset 0 0 0 3px #e69500; }
+.dif-mas { color: var(--rojo-t); font-weight: 700; }
+.dif-menos { color: #1f3d7a; font-weight: 700; }
+.fila-hueco td { background: #fff; }
+.fila-hueco .pastilla { cursor: default; }
+.estado-semana { display: inline-block; border-radius: 99px; padding: 2px 10px; font-size: .8rem; font-weight: 700; background: var(--gris-f); }
+.estado-semana.autorizado { background: var(--verde-f); color: var(--verde-t); }
+.estado-semana.cargado { background: #dbe7fb; color: #1f3d7a; }
+
+/* validación */
+.criterio { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--linea); }
+.criterio:last-child { border-bottom: 0; }
+.semaforo { width: 22px; height: 22px; border-radius: 50%; margin-top: 1px; }
+.semaforo.ok { background: #43c463; }
+.semaforo.error { background: #d0021b; }
+.semaforo.alerta { background: #ffb020; }
+.criterio ul { margin: 4px 0 0; padding-left: 18px; color: var(--rojo-t); font-size: .9rem; }
+
+/* WhatsApp */
+.wa { width: 100%; min-height: 220px; font: inherit; font-size: .85rem; padding: 8px; border: 1px solid var(--linea); border-radius: 8px; background: #f7fdf8; white-space: pre-wrap; resize: vertical; }
+.edicion input, .edicion select { width: 100%; min-width: 0; }
+
+/* hoja de impresión: no se ve en pantalla */
+#hoja-impresion { display: none; }
+
+@media (max-width: 1000px) {
+  .tablero-wrap { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: static; max-height: none; order: -1; }
+}
+
+/* ---------- hoja de impresión: oficio horizontal, una hoja ----------
+   Las medidas van fuera de @media print para que la app pueda medir la hoja
+   antes de imprimir y encogerla lo justo (la hoja solo se ve al imprimir). */
+#hoja-impresion .horario { min-width: 0; width: 100%; font-size: 9px; }
+#hoja-impresion .horario thead th { padding: 2px; font-size: 9px; }
+#hoja-impresion .horario th.sel, #hoja-impresion .horario td.sel { display: none; }
+#hoja-impresion .horario th.nombre, #hoja-impresion .horario td.nombre { width: 150px; padding: 1px 4px; }
+#hoja-impresion .horario th.cuenta, #hoja-impresion .horario td.cuenta { width: 44px; font-size: 9px; }
+#hoja-impresion td.cuenta small { display: inline; font-size: 8px; padding: 0; margin: 0 0 0 2px; }
+#hoja-impresion .celda { min-height: 0; padding: 1px; line-height: 1.15; }
+#hoja-impresion .celda .tip { display: inline; font-size: 10px; }
+#hoja-impresion .celda .lug, #hoja-impresion .celda .nota-c { display: inline; font-size: 8px; margin-left: 3px; }
+#hoja-impresion td.nombre b { display: inline; font-size: 10px; }
+#hoja-impresion td.nombre small { font-size: 8px; margin-left: 4px; }
+#hoja-impresion tr.area td { padding: 1px 6px; font-size: 9px; }
+#hoja-impresion .pastilla { padding: 1px; margin: 1px 0; font-size: 8px; }
+#hoja-impresion .titulo { margin: 0 0 2px; font-size: 16px; text-align: center; }
+#hoja-impresion .semana-txt { margin: 0 0 4px; text-align: center; font-size: 11px; color: var(--suave); }
+#hoja-impresion .leyenda { font-size: 8px; margin-top: 3px; }
+#hoja-impresion .desliza { border: 0; overflow: visible; }
+
+@page { size: 13in 8.5in; margin: 6mm; }
+@media print {
+  .tab { display: none !important; }
+  #hoja-impresion { display: block !important; }
+}

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Horarios Semanales · Ferre Don Nico</title>
+  <meta name="description" content="Genera, revisa y exporta el horario semanal de Ferretería y Pintura de Ferre Don Nico.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%97%93%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <!-- Misma hoja de estilos que rol-cajas (idéntica, la prueba tests/compartido.test.js lo revisa) -->
+  <link rel="stylesheet" href="css/estilos.css?v=2026.11.19e">
+  <link rel="stylesheet" href="css/horarios.css?v=2026.11.19e">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <span class="logo" aria-hidden="true">🗓️</span>
+      <div>
+        <h1>Horarios Semanales · Ferretería y Pintura</h1>
+        <p class="sub"><span id="estado-conexion">Sin conectar</span> · <span id="estado-guardado"></span> · Versión 2026.11.19e</p>
+      </div>
+    </div>
+    <nav id="pestanas" class="pestanas" aria-label="Pasos"></nav>
+  </header>
+
+  <main>
+    <!-- 1. Catálogos -->
+    <section id="tab-catalogos" class="tab" hidden>
+      <h2>1 · Catálogos</h2>
+      <p class="ayuda">Aquí se conecta el libro de Google Sheets y se revisan la plantilla, las tiendas, las claves de GIRHA, las reglas y las novedades. Lo que cambies aquí lo ven los demás al abrir la app.</p>
+      <div id="conexion-cuerpo"></div>
+      <div id="catalogos-cuerpo"></div>
+    </section>
+
+    <!-- 2. Generar semana -->
+    <section id="tab-generar" class="tab" hidden>
+      <h2>2 · Generar semana</h2>
+      <p class="ayuda">Elige la semana (siempre de jueves a miércoles), revisa lo que trae y presiona <b>Generar</b>. Lo que la app no pueda resolver lo deja marcado en rojo con el motivo: nunca inventa una asignación.</p>
+      <div id="generar-cuerpo"></div>
+    </section>
+
+    <!-- 3. Tablero -->
+    <section id="tab-tablero" class="tab" hidden>
+      <div id="tablero-cuerpo"></div>
+    </section>
+
+    <!-- 4. Validación -->
+    <section id="tab-validacion" class="tab" hidden>
+      <h2>4 · Validación</h2>
+      <div id="validacion-cuerpo"></div>
+    </section>
+
+    <!-- 5. Exportar -->
+    <section id="tab-exportar" class="tab" hidden>
+      <h2>5 · Exportar</h2>
+      <div id="exportar-cuerpo"></div>
+    </section>
+
+    <!-- 6. Historial -->
+    <section id="tab-historial" class="tab" hidden>
+      <h2>6 · Historial</h2>
+      <div id="historial-cuerpo"></div>
+    </section>
+
+    <!-- Hoja para imprimir (PDF de una hoja, oficio horizontal) -->
+    <section id="hoja-impresion" aria-hidden="true"></section>
+  </main>
+
+  <dialog id="modal">
+    <form method="dialog" class="modal-caja" id="modal-form">
+      <div id="modal-cuerpo"></div>
+    </form>
+  </dialog>
+
+  <div id="aviso" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/core.js?v=2026.11.19e"></script>
+  <script src="js/excel.js?v=2026.11.19e"></script>
+  <script src="ejemplos/datos-ejemplo.js?v=2026.11.19e"></script>
+  <script src="js/datos.js?v=2026.11.19e"></script>
+  <script src="js/app.js?v=2026.11.19e"></script>
+</body>
+</html>
